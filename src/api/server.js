@@ -1,12 +1,12 @@
-import { config } from 'dotenv';
-config({ override: true });
-import express from 'express';
-import helmet from 'helmet';
 import cors from 'cors';
+import { config } from 'dotenv';
+import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { connectDB, getLatestEntry, getEntry, getAllEntries, getHistoryEntries, readREADME, entryExists } from '../db/db.js';
-import { startScheduler as initScheduler, stopScheduler as stopJob, getJobStatus as getSchedulerStatus } from '../services/scheduler.js';
+import helmet from 'helmet';
 import { secretManager } from '../../config/secrets.js';
+import { connectDB, getEntry, getHistoryEntries, getLatestEntry, readREADME } from '../db/db.js';
+import { getJobStatus as getSchedulerStatus, startScheduler as initScheduler, stopScheduler as stopJob } from '../services/scheduler.js';
+config({ override: true });
 
 const app = express();
 const PORT = secretManager.get('PORT', 3000);

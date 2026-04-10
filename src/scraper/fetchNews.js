@@ -18,7 +18,7 @@ const RSS_FEEDS = [
   },
   {
     name: 'The Hindu - India',
-    url: 'https://www.thehindu.com/news/india/?service=rss'
+    url: 'https://www.thehindu.com/news/national/?service=rss'
   },
   {
     name: 'The Hindu - World',
