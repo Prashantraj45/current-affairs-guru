@@ -5,159 +5,192 @@ import Link from 'next/link'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
+const CATEGORY_STYLES = {
+  Environment: { bg: 'bg-emerald-900/50', text: 'text-emerald-300', border: 'border-emerald-700/50' },
+  Polity:      { bg: 'bg-blue-900/50',    text: 'text-blue-300',    border: 'border-blue-700/50' },
+  Economy:     { bg: 'bg-yellow-900/50',  text: 'text-yellow-300',  border: 'border-yellow-700/50' },
+  IR:          { bg: 'bg-purple-900/50',  text: 'text-purple-300',  border: 'border-purple-700/50' },
+  Science:     { bg: 'bg-cyan-900/50',    text: 'text-cyan-300',    border: 'border-cyan-700/50' },
+  Reports:     { bg: 'bg-orange-900/50',  text: 'text-orange-300',  border: 'border-orange-700/50' },
+}
+
+function Section({ title, children, accent }) {
+  return (
+    <section className="glass-panel rounded-xl p-6 mb-5">
+      <h2 className={`text-xs uppercase tracking-widest font-body mb-4 ${accent || 'text-primary'}`}>{title}</h2>
+      {children}
+    </section>
+  )
+}
+
 export default function TopicDetail() {
   const router = useRouter()
-  const { id } = router.query
+  const { id, date } = router.query
   const [topic, setTopic] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     if (!id) return
+    const url = date ? `${API_URL}/api/topic/${id}?date=${date}` : `${API_URL}/api/topic/${id}`
+    axios.get(url)
+      .then(r => setTopic(r.data))
+      .catch(e => setError(e.response?.data?.error || e.message))
+      .finally(() => setLoading(false))
+  }, [id, date])
 
-    const fetchTopic = async () => {
-      try {
-        const response = await axios.get(`${API_URL}/api/topic/${id}`)
-        setTopic(response.data)
-      } catch (error) {
-        console.error('Error fetching topic:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-96"><span className="text-on-surface-variant text-sm">Loading...</span></div>
+  }
 
-    fetchTopic()
-  }, [id])
+  if (error) {
+    return (
+      <div className="max-w-3xl mx-auto px-6 py-12">
+        <div className="glass-panel rounded-xl p-6 border border-red-900/50 text-red-300 mb-4">{error}</div>
+        <Link href="/" className="text-primary text-sm hover:underline">← Back to Dashboard</Link>
+      </div>
+    )
+  }
 
-  if (loading) return <div className="container mx-auto p-8 text-center">Loading...</div>
-  if (!topic) return <div className="container mx-auto p-8 text-center">Topic not found</div>
+  if (!topic) return null
+
+  const catStyle = CATEGORY_STYLES[topic.category] || { bg: 'bg-slate-800', text: 'text-slate-300', border: 'border-slate-600' }
 
   return (
-    <div className="container mx-auto p-8">
-      <Link href="/" className="text-blue-600 hover:underline mb-6 inline-block">← Back to Dashboard</Link>
+    <div className="max-w-3xl mx-auto px-6 py-10">
+      <Link href="/" className="text-on-surface-variant text-sm hover:text-primary transition-colors inline-flex items-center gap-1 mb-8">
+        ← Dashboard
+      </Link>
 
-      <article className="max-w-3xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-3">{topic.title}</h1>
-          <div className="flex gap-4 flex-wrap">
-            <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded">
-              {topic.category}
-            </span>
-            <span className="bg-green-100 text-green-800 px-3 py-1 rounded">
-              Relevance: {topic.upsc_relevance_score}/100
-            </span>
-            <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded">
-              {topic.metadata?.importance_tag || 'medium'}
-            </span>
-          </div>
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex flex-wrap gap-2 mb-4">
+          <span className={`text-xs font-medium px-3 py-1 rounded border ${catStyle.bg} ${catStyle.text} ${catStyle.border}`}>
+            {topic.category}
+          </span>
+          <span className="text-xs px-3 py-1 rounded border border-primary/30 bg-primary/10 text-primary">
+            Score {topic.score}/100
+          </span>
+          <span className={`text-xs px-3 py-1 rounded border ${topic.importance === 'HIGH' ? 'border-red-700/50 bg-red-900/40 text-red-300' : topic.importance === 'MEDIUM' ? 'border-amber-700/50 bg-amber-900/40 text-amber-300' : 'border-slate-600 bg-slate-800/40 text-slate-400'}`}>
+            {topic.importance}
+          </span>
         </div>
+        <h1 className="font-headline text-3xl text-on-surface font-normal leading-tight">{topic.title}</h1>
+        {topic.date && <p className="text-on-surface-variant text-xs mt-2">{topic.date}</p>}
+      </div>
 
-        {/* Why in News */}
-        <section className="mb-8 bg-white p-6 rounded-lg shadow">
-          <h2 className="text-2xl font-bold mb-3">📰 Why in News?</h2>
-          <p className="text-gray-700">{topic.why_in_news}</p>
-        </section>
+      {/* Summary */}
+      {topic.summary && (
+        <div className="rounded-xl p-5 mb-5 border border-primary/20 bg-primary/5">
+          <p className="text-on-surface leading-relaxed">{topic.summary}</p>
+        </div>
+      )}
 
-        {/* Core Concept */}
-        <section className="mb-8 bg-white p-6 rounded-lg shadow">
-          <h2 className="text-2xl font-bold mb-3">🧠 Core Concept</h2>
-          <p className="text-gray-700">{topic.core_concept}</p>
-        </section>
+      {/* Why in News */}
+      <Section title="Why in News">
+        <p className="text-on-surface-variant leading-relaxed">{topic.why_in_news}</p>
+      </Section>
 
-        {/* Explanation */}
-        <section className="mb-8 bg-white p-6 rounded-lg shadow">
-          <h2 className="text-2xl font-bold mb-3">📖 Detailed Explanation</h2>
-          <p className="text-gray-700">{topic.explanation}</p>
-        </section>
+      {/* Key Facts */}
+      {topic.facts?.length > 0 && (
+        <Section title="Key Facts" accent="text-tertiary">
+          <ul className="space-y-2">
+            {topic.facts.map((fact, i) => (
+              <li key={i} className="flex gap-3 text-on-surface-variant">
+                <span className="text-tertiary mt-0.5 flex-shrink-0">◆</span>
+                <span>{fact}</span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
 
-        {/* Prelims */}
-        <section className="mb-8 bg-white p-6 rounded-lg shadow">
-          <h2 className="text-2xl font-bold mb-3">✍️ For Prelims</h2>
+      {/* Explanation */}
+      <Section title="Explanation">
+        <div className="text-on-surface-variant whitespace-pre-line leading-relaxed">{topic.explanation}</div>
+      </Section>
 
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold mb-3">Key Facts:</h3>
-            <ul className="list-disc list-inside space-y-2">
-              {topic.prelims?.key_facts?.map((fact, i) => (
-                <li key={i} className="text-gray-700">{fact}</li>
-              ))}
-            </ul>
-          </div>
-
-          {topic.prelims?.mcq && (
-            <div className="bg-gray-50 p-4 rounded">
-              <h3 className="font-semibold mb-3">Sample MCQ:</h3>
-              <p className="mb-3 font-medium">{topic.prelims.mcq.question}</p>
-              <div className="space-y-2">
-                {topic.prelims.mcq.options?.map((option, i) => (
-                  <label key={i} className="flex items-center p-2 hover:bg-gray-100 rounded cursor-pointer">
-                    <input type="radio" name="mcq" className="mr-3" />
-                    <span>{option}</span>
-                  </label>
-                ))}
-              </div>
-              <p className="mt-4 text-sm text-gray-600">
-                Answer: <span className="font-semibold">{topic.prelims.mcq.answer}</span>
-              </p>
-            </div>
-          )}
-        </section>
-
-        {/* Mains */}
-        <section className="mb-8 bg-white p-6 rounded-lg shadow">
-          <h2 className="text-2xl font-bold mb-3">📝 For Mains</h2>
-
-          <div className="mb-4">
-            <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded">
-              {topic.mains?.gs_paper}
-            </span>
-          </div>
-
-          <p className="mb-4 font-medium text-lg">{topic.mains?.question}</p>
-
-          {topic.mains?.answer_framework && (
-            <div className="space-y-4">
-              <div>
-                <h4 className="font-semibold text-blue-700">Introduction:</h4>
-                <p className="text-gray-700 ml-4">{topic.mains.answer_framework.intro}</p>
-              </div>
-              <div>
-                <h4 className="font-semibold text-blue-700">Body:</h4>
-                <ul className="list-disc list-inside ml-4 space-y-2">
-                  {topic.mains.answer_framework.body?.map((point, i) => (
-                    <li key={i} className="text-gray-700">{point}</li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-semibold text-blue-700">Conclusion:</h4>
-                <p className="text-gray-700 ml-4">{topic.mains.answer_framework.conclusion}</p>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* Revision Note */}
-        <section className="mb-8 bg-yellow-50 p-6 rounded-lg border border-yellow-200">
-          <h2 className="text-lg font-bold mb-3">⚡ Quick Revision (50 words)</h2>
-          <p className="text-gray-700">{topic.revision_note_50_words}</p>
-        </section>
-
-        {/* Sources */}
-        {topic.sources && topic.sources.length > 0 && (
-          <section className="mb-8 bg-white p-6 rounded-lg shadow">
-            <h2 className="text-2xl font-bold mb-3">📚 Sources</h2>
+      {/* Prelims */}
+      <Section title="For Prelims" accent="text-secondary">
+        {topic.prelims?.key_facts?.length > 0 && (
+          <div className="mb-5">
+            <p className="text-xs text-outline uppercase tracking-wide mb-3">Key Facts</p>
             <ul className="space-y-2">
-              {topic.sources.map((source, i) => (
-                <li key={i}>
-                  <a href={source.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                    {source.name} →
-                  </a>
+              {topic.prelims.key_facts.map((f, i) => (
+                <li key={i} className="flex gap-2 text-on-surface-variant text-sm">
+                  <span className="text-secondary">✓</span>{f}
                 </li>
               ))}
             </ul>
-          </section>
+          </div>
         )}
-      </article>
+        {topic.prelims?.mcq && (
+          <div className="rounded-lg p-4 bg-surface-mid border border-outline-variant/30">
+            <p className="text-xs text-outline uppercase tracking-wide mb-3">Sample MCQ</p>
+            <p className="text-on-surface font-medium mb-4">{topic.prelims.mcq.question}</p>
+            <div className="space-y-2">
+              {topic.prelims.mcq.options?.map((opt, i) => (
+                <label key={i} className="flex items-center gap-3 p-2 rounded hover:bg-surface-high cursor-pointer transition-colors">
+                  <input type="radio" name={`mcq-${topic.id}`} className="accent-primary" />
+                  <span className="text-on-surface-variant text-sm">{opt}</span>
+                </label>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-outline">
+              Answer: <span className="text-secondary font-semibold">{topic.prelims.mcq.answer}</span>
+            </p>
+          </div>
+        )}
+      </Section>
+
+      {/* Mains */}
+      <Section title="For Mains" accent="text-purple-400">
+        <div className="flex gap-2 mb-4">
+          <span className="text-xs px-3 py-1 rounded border border-purple-700/50 bg-purple-900/40 text-purple-300">
+            {topic.mains?.gs_paper}
+          </span>
+        </div>
+        <p className="text-on-surface font-medium mb-5">{topic.mains?.question}</p>
+        {topic.mains?.answer_framework && (
+          <div className="space-y-4 border-l-2 border-purple-800/50 pl-4">
+            <div>
+              <span className="text-xs text-purple-400 uppercase tracking-wide">Introduction</span>
+              <p className="text-on-surface-variant text-sm mt-1">{topic.mains.answer_framework.intro}</p>
+            </div>
+            {topic.mains.answer_framework.body?.length > 0 && (
+              <div>
+                <span className="text-xs text-purple-400 uppercase tracking-wide">Body</span>
+                <ul className="mt-2 space-y-1">
+                  {topic.mains.answer_framework.body.map((pt, i) => (
+                    <li key={i} className="flex gap-2 text-on-surface-variant text-sm"><span className="text-purple-600">•</span>{pt}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div>
+              <span className="text-xs text-purple-400 uppercase tracking-wide">Conclusion</span>
+              <p className="text-on-surface-variant text-sm mt-1">{topic.mains.answer_framework.conclusion}</p>
+            </div>
+          </div>
+        )}
+      </Section>
+
+      {/* Tags */}
+      {topic.tags?.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-5">
+          {topic.tags.map(tag => (
+            <span key={tag} className="text-xs px-3 py-1 rounded-full border border-outline-variant text-on-surface-variant">
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Revision Note */}
+      <div className="rounded-xl p-5 border border-tertiary/30 bg-tertiary/5">
+        <p className="text-xs text-tertiary uppercase tracking-widest mb-2">⚡ Quick Revision</p>
+        <p className="text-on-surface leading-relaxed">{topic.revision_note}</p>
+      </div>
     </div>
   )
 }

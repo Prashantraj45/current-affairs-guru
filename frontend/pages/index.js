@@ -4,74 +4,121 @@ import axios from 'axios'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
+const CATEGORY_STYLES = {
+  Environment: { bg: 'bg-emerald-900/50', text: 'text-emerald-300', border: 'border-emerald-700/50' },
+  Polity:      { bg: 'bg-blue-900/50',    text: 'text-blue-300',    border: 'border-blue-700/50' },
+  Economy:     { bg: 'bg-yellow-900/50',  text: 'text-yellow-300',  border: 'border-yellow-700/50' },
+  IR:          { bg: 'bg-purple-900/50',  text: 'text-purple-300',  border: 'border-purple-700/50' },
+  Science:     { bg: 'bg-cyan-900/50',    text: 'text-cyan-300',    border: 'border-cyan-700/50' },
+  Reports:     { bg: 'bg-orange-900/50',  text: 'text-orange-300',  border: 'border-orange-700/50' },
+}
+
+const IMPORTANCE_STYLES = {
+  HIGH:   { bg: 'bg-red-900/40',    text: 'text-red-300',    dot: 'bg-red-400' },
+  MEDIUM: { bg: 'bg-amber-900/40',  text: 'text-amber-300',  dot: 'bg-amber-400' },
+  LOW:    { bg: 'bg-slate-700/40',  text: 'text-slate-400',  dot: 'bg-slate-500' },
+}
+
+function CategoryBadge({ category }) {
+  const s = CATEGORY_STYLES[category] || { bg: 'bg-slate-800', text: 'text-slate-300', border: 'border-slate-600' }
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded border ${s.bg} ${s.text} ${s.border}`}>
+      {category}
+    </span>
+  )
+}
+
+function ImportanceDot({ importance }) {
+  const s = IMPORTANCE_STYLES[importance] || IMPORTANCE_STYLES.LOW
+  return <span className={`inline-block w-2 h-2 rounded-full ${s.dot}`} />
+}
+
 export default function Dashboard() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    fetchToday()
+    axios.get(`${API_URL}/api/today`)
+      .then(r => setData(r.data))
+      .catch(e => setError(e.response?.data?.error || e.message))
+      .finally(() => setLoading(false))
   }, [])
 
-  const fetchToday = async () => {
-    try {
-      setLoading(true)
-      const response = await axios.get(`${API_URL}/api/today`)
-      setData(response.data)
-      setError(null)
-    } catch (err) {
-      setError(err.message)
-      setLoading(false)
-    } finally {
-      setLoading(false)
-    }
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-96">
+        <div className="text-on-surface-variant text-sm">Loading intelligence...</div>
+      </div>
+    )
   }
 
-  if (loading) return <div className="container mx-auto p-8 text-center">Loading...</div>
-  if (error) return <div className="container mx-auto p-8 text-red-600">Error: {error}</div>
-  if (!data) return <div className="container mx-auto p-8 text-center">No data available</div>
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto px-6 py-12">
+        <div className="glass-panel rounded-xl p-6 border border-red-900/50 text-red-300">{error}</div>
+      </div>
+    )
+  }
+
+  if (!data) return null
 
   const topics = data.topics || []
   const heroTopics = topics.slice(0, 3)
   const otherTopics = topics.slice(3)
+  const allTags = [...new Set(topics.flatMap(t => t.tags || []))]
 
   return (
-    <div className="container mx-auto p-8">
-      <h2 className="text-4xl font-bold mb-8">Today's Intelligence</h2>
+    <div className="max-w-6xl mx-auto px-6 py-10">
+      {/* Page header */}
+      <div className="mb-10">
+        <p className="text-on-surface-variant text-sm uppercase tracking-widest mb-2 font-body">Daily Intelligence</p>
+        <h1 className="font-headline text-4xl text-on-surface font-light">Today&apos;s Briefing</h1>
+        <p className="text-on-surface-variant text-sm mt-2">{data.date} · {topics.length} topics</p>
+      </div>
 
-      {/* Hero Topics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        {heroTopics.map((topic) => (
-          <Link key={topic.id} href={`/topic/${topic.id}`}>
-            <div className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl cursor-pointer transition">
-              <div className="flex justify-between items-start mb-3">
-                <h3 className="text-xl font-bold flex-1">{topic.title}</h3>
-                <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded text-sm ml-2">
-                  {topic.upsc_relevance_score}
-                </span>
+      {/* Hero cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-12">
+        {heroTopics.map((topic, i) => (
+          <Link key={topic.id} href={`/topic/${topic.id}?date=${data.date}`}>
+            <div className="glass-panel rounded-xl p-6 hover:border-primary/30 transition-all duration-300 cursor-pointer h-full flex flex-col group">
+              <div className="flex items-start justify-between gap-2 mb-4">
+                <CategoryBadge category={topic.category} />
+                <div className="flex items-center gap-1.5">
+                  <ImportanceDot importance={topic.importance} />
+                  <span className="text-xs text-on-surface-variant">{topic.importance}</span>
+                </div>
               </div>
-              <p className="text-gray-600 text-sm mb-3">{topic.category}</p>
-              <p className="text-gray-700">{topic.explanation.substring(0, 100)}...</p>
+              <h2 className="font-headline text-lg text-on-surface leading-snug mb-3 group-hover:text-primary transition-colors">
+                {topic.title}
+              </h2>
+              <p className="text-on-surface-variant text-sm leading-relaxed flex-1 line-clamp-3">
+                {topic.summary}
+              </p>
+              <div className="mt-5 flex items-center justify-between">
+                <span className="text-xs text-outline">Score {topic.score}/100</span>
+                <span className="text-primary text-xs group-hover:translate-x-1 transition-transform inline-block">Read →</span>
+              </div>
             </div>
           </Link>
         ))}
       </div>
 
-      {/* Other Topics */}
+      {/* More topics list */}
       {otherTopics.length > 0 && (
-        <div>
-          <h3 className="text-2xl font-bold mb-6">More Topics</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {otherTopics.map((topic) => (
-              <Link key={topic.id} href={`/topic/${topic.id}`}>
-                <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg cursor-pointer transition">
-                  <div className="flex justify-between items-start mb-3">
-                    <h4 className="text-lg font-semibold flex-1">{topic.title}</h4>
-                    <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs ml-2">
-                      {topic.upsc_relevance_score}
-                    </span>
+        <div className="mb-12">
+          <h2 className="text-on-surface-variant text-xs uppercase tracking-widest mb-4 font-body">More Topics</h2>
+          <div className="space-y-2">
+            {otherTopics.map(topic => (
+              <Link key={topic.id} href={`/topic/${topic.id}?date=${data.date}`}>
+                <div className="glass-panel rounded-lg px-5 py-4 flex items-center gap-4 hover:border-primary/20 transition-all cursor-pointer group">
+                  <ImportanceDot importance={topic.importance} />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-on-surface font-medium group-hover:text-primary transition-colors">{topic.title}</span>
+                    <p className="text-on-surface-variant text-xs mt-0.5 truncate">{topic.summary}</p>
                   </div>
-                  <p className="text-gray-600 text-sm">{topic.category}</p>
+                  <CategoryBadge category={topic.category} />
+                  <span className="text-outline text-sm group-hover:text-primary transition-colors">→</span>
                 </div>
               </Link>
             ))}
@@ -79,10 +126,19 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="mt-12 text-center text-gray-600">
-        <p>Total Topics: {topics.length}</p>
-        <p className="text-sm mt-2">Last Updated: {data.date}</p>
-      </div>
+      {/* Tags cloud */}
+      {allTags.length > 0 && (
+        <div>
+          <h2 className="text-on-surface-variant text-xs uppercase tracking-widest mb-3 font-body">Syllabus Coverage</h2>
+          <div className="flex flex-wrap gap-2">
+            {allTags.map(tag => (
+              <span key={tag} className="text-xs px-3 py-1 rounded-full border border-outline-variant text-on-surface-variant hover:border-primary/40 hover:text-primary transition-colors">
+                {tag}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
