@@ -3,7 +3,7 @@ config({ override: true });
 import express from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { connectDB, getLatestEntry, getEntry, getAllEntries, readREADME } from '../db/db.js';
+import { connectDB, getLatestEntry, getEntry, getAllEntries, getHistoryEntries, readREADME, entryExists } from '../db/db.js';
 import { startScheduler as initScheduler, stopScheduler as stopJob, getJobStatus as getSchedulerStatus } from '../services/scheduler.js';
 import { secretManager } from '../../config/secrets.js';
 
@@ -140,9 +140,13 @@ app.get('/api/today', async (req, res) => {
   try {
     const latest = await getLatestEntry();
     if (!latest) {
-      return res.status(404).json({ error: 'No data available for today' });
+      return res.status(404).json({ error: 'No data available yet. Run the daily job first.' });
     }
-    res.json(latest);
+    res.json({
+      date: latest.date,
+      topics: latest.topics || [],
+      insights: latest.insights || {}
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -151,10 +155,14 @@ app.get('/api/today', async (req, res) => {
 // Get all history
 app.get('/api/history', async (req, res) => {
   try {
-    const entries = await getAllEntries();
+    const entries = await getHistoryEntries();
     res.json({
       total: entries.length,
-      entries: entries
+      entries: entries.map(e => ({
+        date: e.date,
+        topicCount: e.topics?.length || 0,
+        topics: e.topics || []
+      }))
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -165,86 +173,63 @@ app.get('/api/history', async (req, res) => {
 app.get('/api/date/:date', async (req, res) => {
   try {
     const { date } = req.params;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+    }
     const entry = await getEntry(date);
-
     if (!entry) {
-      return res.status(404).json({ error: `No data available for ${date}` });
+      return res.status(404).json({ error: `No data for ${date}` });
     }
-
-    res.json(entry);
+    res.json({
+      date: entry.date,
+      topics: entry.topics || [],
+      insights: entry.insights || {}
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get system memory / README
-app.get('/api/memory', async (req, res) => {
-  try {
-    const readme = await readREADME();
-    if (!readme) {
-      return res.status(404).json({ error: 'No memory data available' });
-    }
-    res.json(readme);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get dashboard data
-app.get('/api/dashboard', async (req, res) => {
-  try {
-    const latest = await getLatestEntry();
-    if (!latest || !latest.ui_output) {
-      return res.status(404).json({ error: 'No dashboard data available' });
-    }
-    res.json(latest.ui_output.dashboard || {});
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get insights
+// Get insights from memory
 app.get('/api/insights', async (req, res) => {
   try {
-    const latest = await getLatestEntry();
-    if (!latest || !latest.ui_output) {
-      return res.status(404).json({ error: 'No insights data available' });
+    const memory = await readREADME();
+    if (!memory) {
+      return res.status(404).json({ error: 'No insights available yet' });
     }
-    res.json(latest.ui_output.insights || {});
+    res.json(memory);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get topics list
-app.get('/api/topics', async (req, res) => {
-  try {
-    const latest = await getLatestEntry();
-    if (!latest || !latest.topics) {
-      return res.status(404).json({ error: 'No topics available' });
-    }
-    res.json(latest.topics);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get single topic by ID
+// Get single topic by ID (optional ?date= query param to scope to a specific date)
 app.get('/api/topic/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const latest = await getLatestEntry();
+    const { date } = req.query;
 
-    if (!latest || !latest.topics) {
+    let entry;
+    if (date) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+      }
+      entry = await getEntry(date);
+    } else {
+      entry = await getLatestEntry();
+    }
+
+    if (!entry?.topics) {
       return res.status(404).json({ error: 'No topics available' });
     }
 
-    const topic = latest.topics.find(t => t.id === id);
+    const topic = entry.topics.find(t => t.id === id);
     if (!topic) {
-      return res.status(404).json({ error: `Topic ${id} not found` });
+      return res.status(404).json({ error: `Topic '${id}' not found${date ? ` for ${date}` : ''}` });
     }
 
-    res.json(topic);
+    const topicObj = topic.toObject ? topic.toObject() : topic;
+    res.json({ ...topicObj, date: entry.date });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -298,17 +283,14 @@ app.use((req, res) => {
   res.status(404).json({
     error: 'Endpoint not found',
     available: [
-      'GET /health',
-      'GET /api/today',
-      'GET /api/history',
-      'GET /api/date/:date',
-      'GET /api/memory',
-      'GET /api/dashboard',
-      'GET /api/insights',
-      'GET /api/topics',
-      'GET /api/topic/:id',
-      'GET /api/admin/status (requires x-admin-key header)',
-      'POST /api/admin/stop (requires x-admin-key header)'
+      'GET  /health',
+      'GET  /api/today',
+      'GET  /api/history',
+      'GET  /api/date/:date',
+      'GET  /api/insights',
+      'GET  /api/topic/:id?date=YYYY-MM-DD',
+      'GET  /api/admin/status  (x-admin-key header required)',
+      'POST /api/admin/stop    (x-admin-key header required)',
     ]
   });
 });
@@ -340,11 +322,8 @@ async function startServer() {
       console.log('    GET  /api/today');
       console.log('    GET  /api/history');
       console.log('    GET  /api/date/:date');
-      console.log('    GET  /api/memory');
-      console.log('    GET  /api/dashboard');
       console.log('    GET  /api/insights');
-      console.log('    GET  /api/topics');
-      console.log('    GET  /api/topic/:id');
+      console.log('    GET  /api/topic/:id?date=YYYY-MM-DD');
       console.log('\n  Admin (requires x-admin-key header):');
       console.log('    GET  /api/admin/status');
       console.log('    POST /api/admin/stop');
