@@ -23,8 +23,8 @@ export function compressNews(batch) {
 export function compressMemory(readme) {
   if (!readme) return null;
   return {
-    trends: (readme.key_trends || []).slice(0, 3),
-    recurring: (readme.recurring_topics || []).slice(0, 2),
+    trends: (readme.trends || readme.key_trends || []).slice(0, 3),
+    recurring: (readme.recurringThemes || readme.recurring_topics || []).slice(0, 2),
   };
 }
 

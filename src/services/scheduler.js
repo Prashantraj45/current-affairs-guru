@@ -94,29 +94,27 @@ export async function runDailyJob() {
 
     console.log('✓ AI processing completed');
 
-    // Step 4: Update README with new state
+    // Step 4: Update memory with latest insights
     console.log('\n[STEP 4] Updating system memory...');
-    if (claudeOutput.readme) {
-      await writeREADME(claudeOutput.readme);
-      console.log('✓ README updated');
+    if (claudeOutput.insights) {
+      await writeREADME(claudeOutput.insights);
+      console.log('✓ Memory updated');
     }
 
     // Step 5: Save to database
     console.log('\n[STEP 5] Saving to database...');
     const entry = {
-      plan: claudeOutput.plan || {},
-      readme: claudeOutput.readme || {},
       topics: claudeOutput.topics || [],
-      ui_output: claudeOutput.ui_output || {}
+      insights: claudeOutput.insights || {}
     };
 
     await saveEntry(entry);
-    console.log('✓ Database entry saved');
+    console.log(`✓ Saved ${entry.topics.length} topics`);
 
     // Step 6: Summary
     console.log('\n========================================');
     console.log('JOB COMPLETED SUCCESSFULLY');
-    console.log(`Topics processed: ${(entry.topics || []).length}`);
+    console.log(`Topics: ${entry.topics.length}`);
     console.log('========================================\n');
 
     // Release lock on success

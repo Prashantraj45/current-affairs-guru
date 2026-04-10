@@ -2,17 +2,11 @@ import mongoose from 'mongoose';
 import Entry from '../models/Entry.js';
 import Memory from '../models/Memory.js';
 
-// Connect to MongoDB
 export async function connectDB() {
   try {
     const mongoUri = process.env.MONGODB_URI;
-    if (!mongoUri) {
-      throw new Error('MONGODB_URI not set in environment variables');
-    }
-    await mongoose.connect(mongoUri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true
-    });
+    if (!mongoUri) throw new Error('MONGODB_URI not set');
+    await mongoose.connect(mongoUri);
     console.log('✓ MongoDB connected');
   } catch (error) {
     console.error('Error connecting to MongoDB:', error);
@@ -25,14 +19,10 @@ export async function saveEntry(entry) {
     const today = new Date().toISOString().split('T')[0];
     const result = await Entry.findOneAndUpdate(
       { date: today },
-      {
-        date: today,
-        ...entry,
-        updatedAt: new Date()
-      },
+      { date: today, topics: entry.topics || [], insights: entry.insights || {}, updatedAt: new Date() },
       { upsert: true, new: true }
     );
-    console.log('Entry saved successfully');
+    console.log(`Entry saved: ${result.topics.length} topics`);
     return result;
   } catch (error) {
     console.error('Error saving entry:', error);
@@ -58,6 +48,19 @@ export async function getAllEntries() {
   }
 }
 
+// Lightweight projection for history list — no heavy content fields
+export async function getHistoryEntries() {
+  try {
+    return await Entry.find(
+      {},
+      { date: 1, 'topics.id': 1, 'topics.title': 1, 'topics.category': 1, 'topics.importance': 1 }
+    ).sort({ date: -1 });
+  } catch (error) {
+    console.error('Error getting history entries:', error);
+    return [];
+  }
+}
+
 export async function getLatestEntry() {
   try {
     return await Entry.findOne().sort({ date: -1 });
@@ -77,23 +80,17 @@ export async function entryExists(date) {
   }
 }
 
-export async function writeREADME(data) {
+export async function writeREADME(insights) {
   try {
     const today = new Date().toISOString().split('T')[0];
-    const result = await Memory.findOneAndUpdate(
+    await Memory.findOneAndUpdate(
       { type: 'system_memory' },
-      {
-        type: 'system_memory',
-        date: today,
-        ...data,
-        updatedAt: new Date()
-      },
+      { type: 'system_memory', date: today, ...insights, updatedAt: new Date() },
       { upsert: true, new: true }
     );
-    console.log('README updated successfully');
-    return result;
+    console.log('Memory updated');
   } catch (error) {
-    console.error('Error writing README:', error);
+    console.error('Error writing memory:', error);
     throw error;
   }
 }
@@ -103,32 +100,20 @@ export async function readREADME() {
     const memory = await Memory.findOne({ type: 'system_memory' });
     if (!memory) {
       return {
-        date: new Date().toISOString().split('T')[0],
-        version: 'v1',
-        summary: 'System initialized',
-        high_priority_domains: [
-          'Environment & Climate',
-          'Polity & Governance',
-          'Economy & Reports',
-          'International Relations',
-          'Science & Tech'
-        ],
-        key_trends: [],
-        recurring_topics: [],
-        static_focus_areas: [
-          'Environment & Climate',
-          'Polity & Governance',
-          'Economy & Reports',
-          'International Relations',
-          'Science & Tech'
-        ],
-        exam_strategy_notes: [],
-        data_quality_notes: 'Initial run'
+        trends: [],
+        recurringThemes: [],
+        strategyNotes: ['Focus on Environment, Polity, and Economy for upcoming exam'],
+        highPriorityDomains: ['Environment & Climate', 'Polity & Governance', 'Economy & Reports', 'International Relations', 'Science & Tech']
       };
     }
-    return memory;
+    return {
+      trends: memory.trends || [],
+      recurringThemes: memory.recurringThemes || [],
+      strategyNotes: memory.strategyNotes || [],
+      highPriorityDomains: memory.highPriorityDomains || []
+    };
   } catch (error) {
-    console.error('Error reading README:', error);
+    console.error('Error reading memory:', error);
     return null;
   }
 }
