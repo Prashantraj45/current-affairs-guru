@@ -1,108 +1,93 @@
-import { useState, useEffect } from 'react'
-import axios from 'axios'
+import { useEffect, useMemo, useState } from 'react';
+import api from '../lib/api';
+import PageHeader from '../components/layout/PageHeader';
+import ScrollReveal from '../components/animations/ScrollReveal';
+import BriefingCard from '../components/ui/BriefingCard';
+import StatBar from '../components/ui/StatBar';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-
-function InsightCard({ title, items, accentClass, icon }) {
-  if (!items?.length) return null
-  return (
-    <section className="glass-panel rounded-xl p-6">
-      <h3 className={`text-xs uppercase tracking-widest font-body mb-4 ${accentClass}`}>{icon} {title}</h3>
-      <ul className="space-y-3">
-        {items.map((item, i) => (
-          <li key={i} className="flex gap-3 text-on-surface-variant text-sm leading-relaxed">
-            <span className={`mt-1 flex-shrink-0 text-xs ${accentClass}`}>◆</span>
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  )
+function calculateCoverage(domains = []) {
+  const total = Math.max(domains.length, 1);
+  return domains.map((domain, index) => ({
+    domain,
+    value: Math.max(20, Math.round(((total - index) / total) * 100)),
+  }));
 }
 
-export default function Insights() {
-  const [insights, setInsights] = useState(null)
-  const [loading, setLoading] = useState(true)
+export default function InsightsPage() {
+  const [insights, setInsights] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    axios.get(`${API_URL}/api/insights`)
-      .then(r => setInsights(r.data))
-      .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [])
+    let active = true;
+    async function load() {
+      try {
+        const response = await api.get('/api/insights');
+        if (active) setInsights(response.data);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-96">
-        <span className="text-on-surface-variant text-sm">Loading insights...</span>
-      </div>
-    )
-  }
+  const coverage = useMemo(
+    () => calculateCoverage(insights?.highPriorityDomains || []),
+    [insights?.highPriorityDomains]
+  );
 
-  if (!insights) {
-    return (
-      <div className="max-w-4xl mx-auto px-6 py-12">
-        <div className="glass-panel rounded-xl p-10 text-center">
-          <p className="text-on-surface-variant">No insights yet.</p>
-          <p className="text-outline text-sm mt-2">Run the daily job to populate intelligence memory.</p>
-        </div>
-      </div>
-    )
-  }
-
-  const hasAnyData = insights.trends?.length || insights.recurringThemes?.length ||
-                     insights.strategyNotes?.length || insights.highPriorityDomains?.length
+  if (loading) return <div className="py-16 text-center text-sm text-on-surface-variant">Loading insights...</div>;
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-10">
-      <div className="mb-10">
-        <p className="text-on-surface-variant text-sm uppercase tracking-widest mb-2 font-body">Intelligence Memory</p>
-        <h1 className="font-headline text-4xl text-on-surface font-light">Insights</h1>
-        <p className="text-on-surface-variant text-sm mt-2">Cross-day UPSC pattern analysis</p>
-      </div>
-
-      {!hasAnyData ? (
-        <div className="glass-panel rounded-xl p-10 text-center">
-          <p className="text-on-surface-variant">Insights will appear after the daily job runs.</p>
+    <>
+      <PageHeader label="Intelligence Memory" title="Insights" meta="Cross-day pattern analysis" />
+      <section className="relative overflow-hidden rounded-panel border border-outline-variant bg-surface-mid p-6 md:p-8">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(186,195,255,0.22),transparent_38%),radial-gradient(circle_at_82%_16%,rgba(177,202,215,0.18),transparent_36%)]" />
+        <div className="relative">
+          <p className="text-xs uppercase tracking-[0.17em] text-on-surface-variant">Strategic Briefing</p>
+          <h2 className="mt-2 max-w-2xl font-headline text-3xl text-on-surface md:text-4xl">
+            Track domain pressure, recurring themes, and exam-facing adjustments.
+          </h2>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Domains first — highest priority */}
-          {insights.highPriorityDomains?.length > 0 && (
-            <section className="glass-panel rounded-xl p-6">
-              <h3 className="text-xs uppercase tracking-widest font-body mb-4 text-primary">🎯 Priority Domains</h3>
-              <div className="flex flex-wrap gap-2">
-                {insights.highPriorityDomains.map((d, i) => (
-                  <span key={i} className="text-xs px-3 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-primary">
-                    {d}
-                  </span>
-                ))}
-              </div>
-            </section>
-          )}
+      </section>
 
-          <InsightCard
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <ScrollReveal>
+          <BriefingCard
             title="Key Trends"
-            items={insights.trends}
-            accentClass="text-tertiary"
-            icon="📈"
+            items={insights?.trends || []}
+            accent="text-primary"
           />
-
-          <InsightCard
+        </ScrollReveal>
+        <ScrollReveal>
+          <BriefingCard
             title="Recurring Themes"
-            items={insights.recurringThemes}
-            accentClass="text-secondary"
-            icon="🔄"
+            items={insights?.recurringThemes || []}
+            accent="text-secondary"
           />
-
-          <InsightCard
-            title="Exam Strategy"
-            items={insights.strategyNotes}
-            accentClass="text-amber-400"
-            icon="💡"
+        </ScrollReveal>
+        <ScrollReveal>
+          <BriefingCard
+            title="Strategy Notes"
+            items={insights?.strategyNotes || []}
+            accent="text-tertiary"
           />
-        </div>
-      )}
-    </div>
-  )
+        </ScrollReveal>
+        <ScrollReveal>
+          <section className="glass-panel rounded-panel border p-5">
+            <h3 className="mb-4 text-xs font-semibold uppercase tracking-[0.17em] text-on-surface-variant">
+              Domain Coverage
+            </h3>
+            <div className="space-y-4">
+              {coverage.map((item) => (
+                <StatBar key={item.domain} label={item.domain} value={item.value} />
+              ))}
+            </div>
+          </section>
+        </ScrollReveal>
+      </div>
+    </>
+  );
 }
