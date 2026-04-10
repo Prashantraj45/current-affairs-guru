@@ -1,9 +1,10 @@
 import OpenAI from 'openai';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-const SYSTEM_PROMPT = `You are a UPSC current affairs analyst.
-Return ONLY valid JSON.
-High signal only.
-No extra text.`;
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SYSTEM_PROMPT = readFileSync(join(__dirname, '../../prompts/upsc_prompt.txt'), 'utf-8');
 
 function getClient() {
   const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
@@ -30,7 +31,7 @@ export async function callDeepSeek(compressedNews, compressedMemory) {
     `DATE: ${today}`,
     `NEWS: ${JSON.stringify(compressedNews)}`,
     compressedMemory ? `MEMORY: ${JSON.stringify(compressedMemory)}` : null,
-    `Return JSON schema:\n{"plan":{"priority_topics":[]},"readme":{"date":"${today}","key_trends":[],"recurring_topics":[],"high_priority_domains":[]},"topics":[{"id":"","title":"","category":"Environment|Polity|Economy|IR|Science|Reports","upsc_relevance_score":0,"why_in_news":"","explanation":"bullet points ≤60 words","prelims":{"key_facts":[],"mcq":{"question":"","options":[],"answer":""}},"mains":{"gs_paper":"","question":""},"revision_note_50_words":"","metadata":{"importance_tag":"HIGH|MEDIUM|LOW"}}],"ui_output":{"dashboard":{"hero_topics":[],"summary":""}}}`
+    `Analyze these news for UPSC. Return JSON with "topics" (max 5, HIGH signal only) and "insights" (trends/recurringThemes/strategyNotes/highPriorityDomains arrays).`
   ].filter(Boolean).join('\n');
 
   const messages = [
@@ -41,7 +42,7 @@ export async function callDeepSeek(compressedNews, compressedMemory) {
   const requestOptions = {
     model: 'deepseek-chat',
     messages,
-    max_tokens: 2000,
+    max_tokens: 3000,
   };
 
   const payloadSize = JSON.stringify(requestOptions).length;
