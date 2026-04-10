@@ -11,14 +11,16 @@
     "frontend": "cd frontend && npm run dev"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "rss-parser": "^3.13.0",
     "@anthropic-ai/sdk": "^0.28.0",
+    "@openrouter/sdk": "^0.11.2",
     "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.0",
+    "helmet": "^7.1.0",
     "mongoose": "^8.0.0",
     "node-cron": "^3.0.2",
-    "express-rate-limit": "^7.1.0",
-    "helmet": "^7.1.0"
+    "openai": "^6.34.0",
+    "rss-parser": "^3.13.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

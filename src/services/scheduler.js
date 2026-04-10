@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { fetchNews } from '../scraper/fetchNews.js';
-import { processNewsBatch } from '../claude/runClaude.js';
+import { processNewsBatch } from '../claude/runAI.js';
 import { saveEntry, readREADME, writeREADME, entryExists } from '../db/db.js';
 import { acquireLock, releaseLock, isLocked, getLockStatus } from '../models/Lock.js';
 
@@ -82,17 +82,17 @@ export async function runDailyJob() {
     const previousREADME = await readREADME();
     console.log('✓ Previous state loaded');
 
-    // Step 3: Process with Claude
-    console.log('\n[STEP 3] Processing with Claude AI...');
+    // Step 3: Process with DeepSeek
+    console.log('\n[STEP 3] Processing with DeepSeek AI...');
     const claudeOutput = await processNewsBatch(newsBatch, previousREADME);
 
     if (!claudeOutput) {
-      console.error('Claude processing failed. Aborting job.');
-      await releaseLock(JOB_NAME, false, 'Claude processing failed');
+      console.error('AI processing failed. Aborting job.');
+      await releaseLock(JOB_NAME, false, 'AI processing failed');
       return;
     }
 
-    console.log('✓ Claude processing completed');
+    console.log('✓ AI processing completed');
 
     // Step 4: Update README with new state
     console.log('\n[STEP 4] Updating system memory...');
