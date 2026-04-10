@@ -57,14 +57,13 @@ export async function runDailyJob(targetDate) {
       return;
     }
 
-    // Step 0b: Check if today's data exists
-    // console.log('\n[CHECK] Verifying today\'s data doesn\'t already exist...');
-    // const exists = await entryExists(today);
-    // if (exists) {
-    //   console.log(`ℹ️  Today's data (${today}) already processed, skipping execution`);
-    //   await releaseLock(JOB_NAME, true);
-    //   return;
-    // }
+    console.log('\n[CHECK] Verifying today\'s data doesn\'t already exist...');
+    const exists = await entryExists(today);
+    if (exists) {
+      console.log(`ℹ️  Today's data (${today}) already processed, skipping execution`);
+      await releaseLock(JOB_NAME, true);
+      return;
+    }
 
     console.log('\n========================================');
     console.log('UPSC Daily Intelligence Job Started');
