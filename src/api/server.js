@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { connectDB, getLatestEntry, getEntry, getAllEntries, readREADME } from '../db/db.js';
 import { startScheduler as initScheduler, stopScheduler as stopJob, getJobStatus as getSchedulerStatus } from '../services/scheduler.js';
-import { secretManager } from '../config/secrets.js';
+import { secretManager } from '../../config/secrets.js';
 
 const app = express();
 const PORT = secretManager.get('PORT', 3000);

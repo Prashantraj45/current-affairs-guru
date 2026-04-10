@@ -1,5 +1,6 @@
 import 'dotenv/config';
-import { connectDB, runDailyJob } from '../services/scheduler.js';
+import { connectDB } from '../db/db.js';
+import { runDailyJob } from '../services/scheduler.js';
 
 async function main() {
   try {

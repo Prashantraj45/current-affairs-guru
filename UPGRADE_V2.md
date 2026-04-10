@@ -62,7 +62,7 @@ npm install
 Create `frontend/.env.local`:
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
 ---
@@ -335,7 +335,7 @@ Fix: Send correct `x-admin-key` header
 ### Frontend Can't Connect to API
 ```
 frontend/.env.local
-NEXT_PUBLIC_API_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
 ### Port Already in Use
