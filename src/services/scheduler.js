@@ -58,9 +58,9 @@ export async function runDailyJob(targetDate) {
     }
 
     console.log('\n[CHECK] Verifying today\'s data doesn\'t already exist...');
-    const exists = await entryExists(today);
+    const exists = await entryExists(jobDate);
     if (exists) {
-      console.log(`ℹ️  Today's data (${today}) already processed, skipping execution`);
+      console.log(`ℹ️  Today's data (${jobDate}) already processed, skipping execution`);
       await releaseLock(JOB_NAME, true);
       return;
     }
