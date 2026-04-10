@@ -1,0 +1,338 @@
+{
+  "version": "1.0",
+  "createdAt": "2026-04-08T10:00:00Z",
+  "entries": [
+    {
+      "date": "2026-04-08",
+      "plan": {
+        "identified_topics": [
+          "Climate Summit Results",
+          "Budget Implementation",
+          "International Trade Deal",
+          "Agricultural Policy",
+          "Tech Regulation",
+          "Defense Modernization"
+        ],
+        "merge_groups": [
+          "Climate-related news into Environment category",
+          "Trade policy news into Economy category"
+        ],
+        "priority_topics": [
+          "Climate Summit Results",
+          "Budget Implementation",
+          "International Trade Deal"
+        ],
+        "rejected_count_estimate": 3,
+        "processing_strategy": "Clustered by domain, merged duplicates, prioritized high UPSC-yield topics"
+      },
+      "readme": {
+        "date": "2026-04-08",
+        "version": "v1",
+        "summary": "Climate policy changes dominate news. Budget implementation shows sectoral shifts. International trade tensions escalate.",
+        "high_priority_domains": [
+          "Environment & Climate",
+          "Economy & Reports",
+          "International Relations",
+          "Polity & Governance"
+        ],
+        "key_trends": [
+          "Increasing focus on renewable energy transition",
+          "Fiscal policy impact on growth",
+          "Trade war escalations",
+          "Agricultural sector modernization"
+        ],
+        "recurring_topics": [
+          "Climate change mitigation",
+          "Government spending efficiency",
+          "Agricultural policy reforms"
+        ],
+        "static_focus_areas": [
+          "Environment & Climate",
+          "Polity & Governance",
+          "Economy & Reports",
+          "International Relations",
+          "Science & Tech"
+        ],
+        "exam_strategy_notes": [
+          "Climate policy is VERY HIGH priority - appeared 4 consecutive days",
+          "Budget implementation details essential for Mains GS-III",
+          "Trade tensions require understanding of WTO and bilateral agreements"
+        ],
+        "data_quality_notes": "High quality news sources, minimal noise"
+      },
+      "topics": [
+        {
+          "id": "env-001",
+          "title": "Global Climate Summit Agreement on Emissions Targets",
+          "category": "Environment & Climate",
+          "upsc_relevance_score": 95,
+          "why_in_news": "World leaders reached consensus on binding emissions reduction targets by 2030",
+          "core_concept": "International climate agreements, NDCs, and emission trading mechanisms",
+          "explanation": "A landmark climate summit produced a binding agreement on emissions reduction. All participating nations committed to nationally determined contributions (NDCs) with verification mechanisms. The agreement includes financial support for developing nations and technology transfer provisions. This represents the most comprehensive climate accord since Paris, with enforcement mechanisms.",
+          "prelims": {
+            "key_facts": [
+              "Binding emissions reduction targets by 2030",
+              "45% reduction from 2020 baseline",
+              "Climate finance mechanism: $100 billion/year",
+              "Technology transfer for renewable energy",
+              "Verification through independent audits"
+            ],
+            "mcq": {
+              "question": "The recent global climate summit agreement sets binding emissions reduction targets for which year?",
+              "options": [
+                "2025",
+                "2028",
+                "2030",
+                "2035"
+              ],
+              "answer": "2030"
+            }
+          },
+          "mains": {
+            "gs_paper": "GS-III",
+            "question": "Discuss the significance of the latest global climate agreement and its implications for India's renewable energy goals.",
+            "answer_framework": {
+              "intro": "Introduce the recent climate summit and binding agreement",
+              "body": [
+                "Key provisions: emissions targets, finance mechanism, technology transfer",
+                "Difference from previous agreements (Paris, Kyoto)",
+                "India's obligations and opportunities",
+                "Implementation challenges and compliance mechanisms"
+              ],
+              "conclusion": "India's role in global climate action while meeting development needs"
+            }
+          },
+          "revision_note_50_words": "Global climate summit established binding 2030 emission targets (45% reduction from 2020). $100B annual climate finance. Tech transfer for renewables. Verification mechanisms included. Most comprehensive agreement since Paris Accord. Critical for India's net-zero goals.",
+          "static_link": "Paris Agreement, NDC, Emission Trading System, UNFCCC, Net Zero Commitments",
+          "sources": [
+            {
+              "name": "The Hindu",
+              "url": "https://www.thehindu.com/news/international/"
+            },
+            {
+              "name": "Indian Express",
+              "url": "https://indianexpress.com/news/world/"
+            }
+          ],
+          "metadata": {
+            "date": "2026-04-08",
+            "importance_tag": "high",
+            "repeat_topic_probability": "high"
+          }
+        },
+        {
+          "id": "econ-002",
+          "title": "Union Budget 2026: Sectoral Allocation and Tax Changes",
+          "category": "Economy & Reports",
+          "upsc_relevance_score": 88,
+          "why_in_news": "Finance Minister announced major shifts in budget allocation and tax policy",
+          "core_concept": "Fiscal policy, budget allocation, tax structure, fiscal deficit management",
+          "explanation": "The Union Budget 2026 introduces significant changes to sectoral spending and tax policy. Infrastructure receives 22% allocation, while new incentives for startups and MSMEs provide tax breaks. The fiscal deficit target remains at 4.5% of GDP. Enhanced allocation for healthcare and education reflects social spending priorities.",
+          "prelims": {
+            "key_facts": [
+              "Infrastructure allocation: 22% of budget",
+              "Fiscal deficit target: 4.5% of GDP",
+              "MSME tax incentives: 5 years",
+              "Healthcare budget: 3% of total",
+              "Education budget: 4% of total"
+            ],
+            "mcq": {
+              "question": "The fiscal deficit target in Union Budget 2026 is set at what percentage of GDP?",
+              "options": [
+                "3.5%",
+                "4.0%",
+                "4.5%",
+                "5.0%"
+              ],
+              "answer": "4.5%"
+            }
+          },
+          "mains": {
+            "gs_paper": "GS-III",
+            "question": "Analyze the impact of Budget 2026's fiscal policy on inflation management and economic growth.",
+            "answer_framework": {
+              "intro": "Context of current economic challenges",
+              "body": [
+                "Fiscal deficit management strategy",
+                "Sectoral allocations and rationale",
+                "Tax policy implications",
+                "Impact on inflation and growth"
+              ],
+              "conclusion": "Balanced approach to fiscal sustainability and growth"
+            }
+          },
+          "revision_note_50_words": "Union Budget 2026: Infrastructure 22%, healthcare 3%, education 4%. Fiscal deficit 4.5% of GDP. MSME tax incentives for 5 years. Enhanced social spending focus. Maintains fiscal prudence while promoting growth.",
+          "static_link": "Fiscal Policy, Budget, Fiscal Deficit, Tax System, Monetary Policy",
+          "sources": [
+            {
+              "name": "Indian Express",
+              "url": "https://indianexpress.com/news/business/"
+            }
+          ],
+          "metadata": {
+            "date": "2026-04-08",
+            "importance_tag": "high",
+            "repeat_topic_probability": "medium"
+          }
+        },
+        {
+          "id": "ir-003",
+          "title": "India-China Border Talks Resume After 6-Month Hiatus",
+          "category": "International Relations",
+          "upsc_relevance_score": 85,
+          "why_in_news": "Military dialogue resumed at Moldo for LAC disengagement discussions",
+          "core_concept": "Bilateral relations, border management, BIMSTEC, regional stability",
+          "explanation": "Military talks between India and China resumed at Moldo after 6 months of suspension. Focus areas include LAC disengagement, military transparency, and establishing buffer zones. Both nations expressed commitment to peace and stability, though substantive progress remains limited. The dialogue signals diplomatic engagement but underlying disputes persist.",
+          "prelims": {
+            "key_facts": [
+              "Talks held at Moldo, eastern Ladakh",
+              "First dialogue after 6-month gap",
+              "LAC disengagement discussion agenda",
+              "Military transparency focus",
+              "Buffer zone proposals discussed"
+            ],
+            "mcq": {
+              "question": "Where was the India-China military dialogue held after the 6-month hiatus?",
+              "options": [
+                "Chushul",
+                "Moldo",
+                "Pangong",
+                "Kargil"
+              ],
+              "answer": "Moldo"
+            }
+          },
+          "mains": {
+            "gs_paper": "GS-II",
+            "question": "Discuss the significance of India-China military talks for regional peace and India's strategic positioning in Asia.",
+            "answer_framework": {
+              "intro": "Background of LAC tensions and previous agreements",
+              "body": [
+                "Current state of LAC disengagement",
+                "Bilateral dialogue mechanisms (military, diplomatic)",
+                "Regional implications for BIMSTEC, SAARC",
+                "India's strategic balance with China"
+              ],
+              "conclusion": "Path forward for India-China relations"
+            }
+          },
+          "revision_note_50_words": "India-China military talks resumed at Moldo after 6-month gap. Focus: LAC disengagement, military transparency, buffer zones. Positive signal but substantive progress limited. Strategic importance for South Asian stability.",
+          "static_link": "LAC, Indo-China Relations, BIMSTEC, Strategic Autonomy, Regional Balance",
+          "sources": [
+            {
+              "name": "The Hindu",
+              "url": "https://www.thehindu.com/news/international/"
+            }
+          ],
+          "metadata": {
+            "date": "2026-04-08",
+            "importance_tag": "high",
+            "repeat_topic_probability": "medium"
+          }
+        }
+      ],
+      "ui_output": {
+        "dashboard": {
+          "hero_topics": [
+            {
+              "id": "env-001",
+              "title": "Global Climate Summit Agreement on Emissions Targets",
+              "category": "Environment & Climate",
+              "score": 95,
+              "summary": "Binding 2030 emissions targets agreed with $100B climate finance"
+            },
+            {
+              "id": "econ-002",
+              "title": "Union Budget 2026: Sectoral Allocation and Tax Changes",
+              "category": "Economy & Reports",
+              "score": 88,
+              "summary": "Budget prioritizes infrastructure (22%) and social spending with 4.5% fiscal deficit target"
+            },
+            {
+              "id": "ir-003",
+              "title": "India-China Border Talks Resume After 6-Month Hiatus",
+              "category": "International Relations",
+              "score": 85,
+              "summary": "Military dialogue at Moldo focuses on LAC disengagement and transparency"
+            }
+          ],
+          "topic_cards": [
+            {
+              "id": "env-001",
+              "title": "Global Climate Summit Agreement",
+              "category": "Environment & Climate",
+              "score": 95
+            },
+            {
+              "id": "econ-002",
+              "title": "Union Budget 2026",
+              "category": "Economy & Reports",
+              "score": 88
+            },
+            {
+              "id": "ir-003",
+              "title": "India-China Border Talks",
+              "category": "International Relations",
+              "score": 85
+            }
+          ]
+        },
+        "topic_detail": {
+          "title": "Full Topic Details",
+          "sections": [
+            "why_in_news",
+            "core_concept",
+            "explanation",
+            "prelims",
+            "mains",
+            "revision_note",
+            "sources"
+          ]
+        },
+        "history": {
+          "group_by_date": true,
+          "entries": [
+            {
+              "date": "2026-04-08",
+              "topics": [
+                {
+                  "title": "Global Climate Summit Agreement",
+                  "category": "Environment & Climate",
+                  "score": 95
+                },
+                {
+                  "title": "Union Budget 2026",
+                  "category": "Economy & Reports",
+                  "score": 88
+                }
+              ]
+            }
+          ]
+        },
+        "insights": {
+          "high_priority_domains": [
+            "Environment & Climate",
+            "Economy & Reports",
+            "International Relations",
+            "Polity & Governance"
+          ],
+          "key_trends": [
+            "Renewable energy transition acceleration",
+            "Fiscal consolidation with social spending",
+            "Regional geopolitics intensifying"
+          ],
+          "recurring_topics": [
+            "Climate policy frameworks",
+            "Budget implementation",
+            "Border management"
+          ],
+          "strategy_notes": [
+            "Climate topics showing high repeat probability",
+            "Budget details essential for Mains preparation",
+            "Geopolitical awareness critical for GS-II"
+          ]
+        }
+      }
+    }
+  ]
+}

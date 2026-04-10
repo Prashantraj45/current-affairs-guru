@@ -1,0 +1,152 @@
+import cron from 'node-cron';
+import { fetchNews } from '../scraper/fetchNews.js';
+import { processNewsBatch } from '../claude/runClaude.js';
+import { saveEntry, readREADME, writeREADME, entryExists } from '../db/db.js';
+import { acquireLock, releaseLock, isLocked, getLockStatus } from '../models/Lock.js';
+
+let scheduledJob = null;
+const JOB_NAME = 'daily_intelligence';
+
+export function startScheduler() {
+  const enabled = process.env.SCHEDULER_ENABLED !== 'false';
+
+  if (!enabled) {
+    console.log('⏸ Scheduler disabled');
+    return;
+  }
+
+  const jobTime = process.env.JOB_TIME || '05:00';
+  const [hour, minute] = jobTime.split(':');
+
+  console.log(`📅 Scheduler starting - Job scheduled for ${jobTime} daily (UTC)`);
+
+  // Schedule job at specified time daily
+  scheduledJob = cron.schedule(`${minute} ${hour} * * *`, async () => {
+    await runDailyJob();
+  });
+
+  console.log('✓ Scheduler ready');
+}
+
+export function stopScheduler() {
+  if (scheduledJob) {
+    scheduledJob.stop();
+    console.log('⏹ Scheduler stopped');
+    scheduledJob = null;
+  }
+}
+
+export async function runDailyJob() {
+  const today = new Date().toISOString().split('T')[0];
+  let lockAcquired = false;
+
+  try {
+    // Step 0: Try to acquire lock
+    console.log('\n[LOCK] Attempting to acquire job lock...');
+    lockAcquired = await acquireLock(JOB_NAME, 3600); // 1 hour TTL
+
+    if (!lockAcquired) {
+      console.log(`⚠️  Could not acquire lock for ${JOB_NAME}`);
+      const status = await getLockStatus(JOB_NAME);
+      console.log('Lock Status:', status);
+      return;
+    }
+
+    // Step 0b: Check if today's data exists
+    console.log('\n[CHECK] Verifying today\'s data doesn\'t already exist...');
+    const exists = await entryExists(today);
+    if (exists) {
+      console.log(`ℹ️  Today's data (${today}) already processed, skipping execution`);
+      await releaseLock(JOB_NAME, true);
+      return;
+    }
+
+    console.log('\n========================================');
+    console.log('UPSC Daily Intelligence Job Started');
+    console.log('Time:', new Date().toISOString());
+    console.log('========================================');
+
+    // Step 1: Fetch news
+    console.log('\n[STEP 1] Fetching news from RSS feeds...');
+    const newsBatch = await fetchNews(15);
+    console.log(`✓ Fetched ${newsBatch.length} news items`);
+
+    if (newsBatch.length === 0) {
+      console.error('No news items fetched. Aborting job.');
+      await releaseLock(JOB_NAME, false, 'No news items fetched');
+      return;
+    }
+
+    // Step 2: Read previous README for context
+    console.log('\n[STEP 2] Loading previous state...');
+    const previousREADME = await readREADME();
+    console.log('✓ Previous state loaded');
+
+    // Step 3: Process with Claude
+    console.log('\n[STEP 3] Processing with Claude AI...');
+    const claudeOutput = await processNewsBatch(newsBatch, previousREADME);
+
+    if (!claudeOutput) {
+      console.error('Claude processing failed. Aborting job.');
+      await releaseLock(JOB_NAME, false, 'Claude processing failed');
+      return;
+    }
+
+    console.log('✓ Claude processing completed');
+
+    // Step 4: Update README with new state
+    console.log('\n[STEP 4] Updating system memory...');
+    if (claudeOutput.readme) {
+      await writeREADME(claudeOutput.readme);
+      console.log('✓ README updated');
+    }
+
+    // Step 5: Save to database
+    console.log('\n[STEP 5] Saving to database...');
+    const entry = {
+      plan: claudeOutput.plan || {},
+      readme: claudeOutput.readme || {},
+      topics: claudeOutput.topics || [],
+      ui_output: claudeOutput.ui_output || {}
+    };
+
+    await saveEntry(entry);
+    console.log('✓ Database entry saved');
+
+    // Step 6: Summary
+    console.log('\n========================================');
+    console.log('JOB COMPLETED SUCCESSFULLY');
+    console.log(`Topics processed: ${(entry.topics || []).length}`);
+    console.log('========================================\n');
+
+    // Release lock on success
+    await releaseLock(JOB_NAME, true);
+
+  } catch (error) {
+    console.error('\n❌ JOB FAILED');
+    console.error('Error:', error.message);
+    console.error('========================================\n');
+
+    // Release lock on failure with reason
+    if (lockAcquired) {
+      await releaseLock(JOB_NAME, false, error.message);
+    }
+  }
+}
+
+export async function getJobStatus() {
+  try {
+    const lockStatus = await getLockStatus(JOB_NAME);
+    return {
+      job: JOB_NAME,
+      running: lockStatus.locked,
+      scheduledTime: process.env.JOB_TIME || '05:00',
+      lock: lockStatus
+    };
+  } catch (error) {
+    return {
+      job: JOB_NAME,
+      error: error.message
+    };
+  }
+}

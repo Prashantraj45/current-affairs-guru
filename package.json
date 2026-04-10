@@ -1,0 +1,26 @@
+{
+  "name": "upsc-ai",
+  "version": "2.0.0",
+  "description": "UPSC Current Affairs AI Intelligence Engine with MongoDB & Scheduler",
+  "main": "src/api/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/api/server.js",
+    "job": "node src/jobs/dailyJob.js",
+    "dev": "nodemon src/api/server.js",
+    "frontend": "cd frontend && npm run dev"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "rss-parser": "^3.13.0",
+    "anthropic": "^0.28.0",
+    "dotenv": "^16.3.1",
+    "mongoose": "^8.0.0",
+    "node-cron": "^3.0.2",
+    "express-rate-limit": "^7.1.0",
+    "helmet": "^7.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
