@@ -2,6 +2,7 @@ import { config } from 'dotenv';
 config({ override: true });
 import express from 'express';
 import helmet from 'helmet';
+import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { connectDB, getLatestEntry, getEntry, getAllEntries, getHistoryEntries, readREADME, entryExists } from '../db/db.js';
 import { startScheduler as initScheduler, stopScheduler as stopJob, getJobStatus as getSchedulerStatus } from '../services/scheduler.js';
@@ -87,6 +88,12 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(cors({
+  origin: [
+    "http://localhost:3000",
+    "https://current-affairs-guru.vercel.app"
+  ]
+}));
 /**
  * Verify admin key from header
  * CRITICAL: Never log, expose, or return the actual key

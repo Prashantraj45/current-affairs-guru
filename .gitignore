@@ -67,3 +67,4 @@ frontend/.env.local
 *password*
 *token*
 *secret*
+!config/secrets.js
