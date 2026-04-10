@@ -11,21 +11,20 @@ let _lastNewsHash = null;
  */
 export function compressNews(batch) {
   const stripHtml = (str) => (str || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-  return batch.slice(0, 8).map((item) => ({
-    t: stripHtml(item.title).substring(0, 90),
-    s: stripHtml(item.summary || item.description || '').substring(0, 130),
+  return batch.slice(0, 5).map((item) => ({
+    t: stripHtml(item.title).substring(0, 80),
+    s: stripHtml(item.summary || item.description || '').substring(0, 100),
   }));
 }
 
 /**
- * Compress previous README: extract only key trends + recurring topics.
+ * Compress previous README: 2-3 items only.
  */
 export function compressMemory(readme) {
   if (!readme) return null;
   return {
-    trends: (readme.key_trends || []).slice(0, 5),
-    recurring: (readme.recurring_topics || []).slice(0, 5),
-    domains: (readme.high_priority_domains || []).slice(0, 3),
+    trends: (readme.key_trends || []).slice(0, 3),
+    recurring: (readme.recurring_topics || []).slice(0, 2),
   };
 }
 
@@ -59,28 +58,22 @@ export async function processNewsBatch(newsBatch, previousREADME = null) {
 
   console.log(`[AI] Provider: deepseek-chat | Items: ${compressedNews.length} | Memory: ${compressedMemory ? 'yes' : 'none'}`);
 
-  // Attempt 1: deepseek-chat
-  let output = await _tryDeepSeek(compressedNews, compressedMemory, false);
-  if (output) {
-    _lastNewsHash = hash;
-    return output;
-  }
+  // Attempt 1
+  let output = await _tryDeepSeek(compressedNews, compressedMemory);
+  if (output) { _lastNewsHash = hash; return output; }
 
-  // Retry: deepseek-reasoner fallback (once)
-  console.warn('[AI] Retrying with deepseek-reasoner...');
-  output = await _tryDeepSeek(compressedNews, compressedMemory, true);
-  if (output) {
-    _lastNewsHash = hash;
-    return output;
-  }
+  // Retry once on failure
+  console.warn('[AI] Retrying once...');
+  output = await _tryDeepSeek(compressedNews, compressedMemory);
+  if (output) { _lastNewsHash = hash; return output; }
 
   console.error('[AI] Both attempts failed');
   return null;
 }
 
-async function _tryDeepSeek(compressedNews, compressedMemory, useReasoner) {
+async function _tryDeepSeek(compressedNews, compressedMemory) {
   try {
-    const output = await callDeepSeek(compressedNews, compressedMemory, useReasoner);
+    const output = await callDeepSeek(compressedNews, compressedMemory);
     if (validateDeepSeekResponse(output)) {
       console.log(`[AI] ✓ Valid response — ${output.topics.length} topics`);
       return output;
@@ -88,7 +81,7 @@ async function _tryDeepSeek(compressedNews, compressedMemory, useReasoner) {
     console.warn('[AI] Response failed validation');
     return null;
   } catch (err) {
-    console.error(`[AI] Error (${useReasoner ? 'reasoner' : 'chat'}):`, err.message);
+    console.error('[AI] Error:', err.message);
     return null;
   }
 }

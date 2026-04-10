@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import { config } from 'dotenv';
+config({ override: true });
 import { connectDB } from '../db/db.js';
 import { runDailyJob } from '../services/scheduler.js';
 
