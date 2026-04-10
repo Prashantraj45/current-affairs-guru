@@ -1,9 +1,8 @@
 export const NAV_LINKS = [
-  { href: '/', label: 'Dashboard' },
-  { href: '/history', label: 'History' },
-  { href: '/insights', label: 'Insights' },
-  { href: '/current-affairs', label: 'Current Affairs' },
-  { href: '/core', label: 'Core' },
+  { href: '/', label: 'Synthesize' },
+  { href: '/history', label: 'Archive' },
+  { href: '/intel-canvas', label: 'Intel Canvas' },
+  { href: '/core', label: 'Core Atlas' },
 ];
 
 export const CATEGORY_COLORS = {
@@ -90,5 +89,3 @@ export const GS_PILLARS = [
     topics: ['Ethical theories', 'Civil service values', 'Probity in governance', 'Case study practice'],
   },
 ];
-
-export const TABS = ['daily', 'weekly', 'monthly'];

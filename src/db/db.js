@@ -1,6 +1,55 @@
 import mongoose from 'mongoose';
 import Entry from '../models/Entry.js';
 import Memory from '../models/Memory.js';
+import MonthlyInsight from '../models/MonthlyInsight.js';
+
+function monthFromDate(date) {
+  return String(date || '').slice(0, 7);
+}
+
+function aggregateStrings(values = [], limit = 12) {
+  const bucket = new Map();
+  values.filter(Boolean).forEach((value) => {
+    bucket.set(value, (bucket.get(value) || 0) + 1);
+  });
+  return [...bucket.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([value]) => value);
+}
+
+export async function refreshMonthlyInsights(month) {
+  if (!/^\d{4}-\d{2}$/.test(month || '')) return null;
+
+  const regex = new RegExp(`^${month}-\\d{2}$`);
+  const entries = await Entry.find({ date: regex }, { date: 1, insights: 1 }).sort({ date: 1 });
+
+  const trends = aggregateStrings(entries.flatMap((entry) => entry.insights?.trends || []));
+  const recurringThemes = aggregateStrings(
+    entries.flatMap((entry) => entry.insights?.recurringThemes || [])
+  );
+  const strategyNotes = aggregateStrings(
+    entries.flatMap((entry) => entry.insights?.strategyNotes || []),
+    16
+  );
+  const highPriorityDomains = aggregateStrings(
+    entries.flatMap((entry) => entry.insights?.highPriorityDomains || []),
+    10
+  );
+  const sourceDates = entries.map((entry) => entry.date);
+
+  const payload = {
+    month,
+    trends,
+    recurringThemes,
+    strategyNotes,
+    highPriorityDomains,
+    sourceDates,
+    updatedAt: new Date(),
+  };
+
+  return MonthlyInsight.findOneAndUpdate({ month }, payload, { upsert: true, new: true });
+}
 
 export async function connectDB() {
   try {
@@ -22,6 +71,7 @@ export async function saveEntry(entry) {
       { date: today, topics: entry.topics || [], insights: entry.insights || {}, updatedAt: new Date() },
       { upsert: true, new: true }
     );
+    await refreshMonthlyInsights(monthFromDate(today));
     console.log(`Entry saved: ${result.topics.length} topics`);
     return result;
   } catch (error) {
@@ -116,4 +166,15 @@ export async function readREADME() {
     console.error('Error reading memory:', error);
     return null;
   }
+}
+
+export async function getMonthlyInsights(month) {
+  if (!/^\d{4}-\d{2}$/.test(month || '')) return null;
+  let doc = await MonthlyInsight.findOne({ month });
+  if (!doc) doc = await refreshMonthlyInsights(month);
+  return doc;
+}
+
+export async function listMonthlyInsights() {
+  return MonthlyInsight.find({}, { month: 1, updatedAt: 1 }).sort({ month: -1 });
 }

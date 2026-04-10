@@ -1,3 +1,4 @@
+import { useRouter } from 'next/router';
 import { BarChart3, Globe2, Scale, ShieldCheck } from 'lucide-react';
 import PageHeader from '../components/layout/PageHeader';
 import StaggerContainer from '../components/animations/StaggerContainer';
@@ -12,19 +13,21 @@ const ICONS = {
 };
 
 export default function CorePage() {
+  const router = useRouter();
+
   return (
     <>
       <PageHeader
         label="Core"
-        title="UPSC Pillars"
-        meta="Static framework for GS Paper I-IV and revision scaffolding"
+        title="Core Atlas"
+        meta="Pick a paper or sub-topic to open a dedicated results canvas"
       />
       <StaggerContainer className="grid gap-4 md:grid-cols-2">
         {GS_PILLARS.map((pillar) => {
           const Icon = ICONS[pillar.icon];
           return (
             <ScrollReveal key={pillar.key}>
-              <article className="glass-panel rounded-panel border p-5">
+              <article className="glass-panel rounded-panel border border-outline-variant p-5 transition">
                 <div className="mb-3 flex items-center gap-3">
                   <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary/12 text-primary">
                     <Icon className="h-5 w-5" />
@@ -35,10 +38,29 @@ export default function CorePage() {
                   </div>
                 </div>
                 <p className="mb-4 text-sm text-on-surface-variant">{pillar.description}</p>
+                <button
+                  type="button"
+                  className="mb-3 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition hover:bg-primary/20"
+                  onClick={() =>
+                    router.push(`/core-results?label=${encodeURIComponent(pillar.key)}&query=${encodeURIComponent(pillar.title)}`)
+                  }
+                >
+                  Open {pillar.key} canvas
+                </button>
                 <ul className="space-y-2">
                   {pillar.topics.map((topic) => (
-                    <li key={topic} className="text-sm text-on-surface">
-                      - {topic}
+                    <li key={topic}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          router.push(
+                            `/core-results?label=${encodeURIComponent(`${pillar.key}: ${topic}`)}&query=${encodeURIComponent(topic)}`
+                          )
+                        }
+                        className="w-full rounded-md px-2 py-1 text-left text-sm text-on-surface transition hover:bg-surface-high hover:text-primary"
+                      >
+                        - {topic}
+                      </button>
                     </li>
                   ))}
                 </ul>

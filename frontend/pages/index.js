@@ -46,8 +46,8 @@ export default function DashboardPage() {
     <>
       <MagazineLoader />
       <PageHeader
-        label="Daily Intelligence"
-        title="Today's Briefing"
+        label="Synthetix Engine"
+        title="Synthesize Briefing"
         meta={`${payload?.date || ''}  |  ${topics.length} topics`}
       />
 

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { Loader2 } from 'lucide-react';
-import { auth } from '../../lib/firebase';
+import { auth, oauthDisabled } from '../../lib/firebase';
 
 function GuardWithFirebase({ children }) {
   const router = useRouter();
@@ -30,6 +30,6 @@ function GuardWithFirebase({ children }) {
 }
 
 export default function AuthGuard({ children }) {
-  if (!auth) return children;
+  if (oauthDisabled || !auth) return children;
   return <GuardWithFirebase>{children}</GuardWithFirebase>;
 }

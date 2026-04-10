@@ -4,7 +4,16 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { secretManager } from '../../config/secrets.js';
-import { connectDB, getEntry, getHistoryEntries, getLatestEntry, readREADME } from '../db/db.js';
+import {
+  connectDB,
+  getEntry,
+  getHistoryEntries,
+  getLatestEntry,
+  getMonthlyInsights,
+  listMonthlyInsights,
+  readREADME,
+  refreshMonthlyInsights
+} from '../db/db.js';
 import { getJobStatus as getSchedulerStatus, startScheduler as initScheduler, stopScheduler as stopJob } from '../services/scheduler.js';
 config({ override: true });
 
@@ -210,6 +219,67 @@ app.get('/api/insights', async (req, res) => {
   }
 });
 
+// Get monthly insights index and default month payload
+app.get('/api/insights/monthly', async (req, res) => {
+  try {
+    const monthsDocs = await listMonthlyInsights();
+    const months = monthsDocs.map((doc) => doc.month);
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const selectedMonth = months.includes(currentMonth) ? currentMonth : months[0] || currentMonth;
+    const selectedDoc = await getMonthlyInsights(selectedMonth);
+
+    res.json({
+      months: months.length ? months : [currentMonth],
+      currentMonth,
+      selectedMonth,
+      insights: selectedDoc
+        ? {
+            month: selectedDoc.month,
+            trends: selectedDoc.trends || [],
+            recurringThemes: selectedDoc.recurringThemes || [],
+            strategyNotes: selectedDoc.strategyNotes || [],
+            highPriorityDomains: selectedDoc.highPriorityDomains || [],
+            sourceDates: selectedDoc.sourceDates || [],
+            updatedAt: selectedDoc.updatedAt
+          }
+        : {
+            month: selectedMonth,
+            trends: [],
+            recurringThemes: [],
+            strategyNotes: [],
+            highPriorityDomains: [],
+            sourceDates: [],
+            updatedAt: new Date().toISOString()
+          }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get monthly insights by month (YYYY-MM)
+app.get('/api/insights/monthly/:month', async (req, res) => {
+  try {
+    const { month } = req.params;
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'Invalid month format. Use YYYY-MM' });
+    }
+
+    const doc = await refreshMonthlyInsights(month);
+    res.json({
+      month,
+      trends: doc?.trends || [],
+      recurringThemes: doc?.recurringThemes || [],
+      strategyNotes: doc?.strategyNotes || [],
+      highPriorityDomains: doc?.highPriorityDomains || [],
+      sourceDates: doc?.sourceDates || [],
+      updatedAt: doc?.updatedAt || new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get single topic by ID (optional ?date= query param to scope to a specific date)
 app.get('/api/topic/:id', async (req, res) => {
   try {
@@ -295,6 +365,8 @@ app.use((req, res) => {
       'GET  /api/history',
       'GET  /api/date/:date',
       'GET  /api/insights',
+      'GET  /api/insights/monthly',
+      'GET  /api/insights/monthly/:month',
       'GET  /api/topic/:id?date=YYYY-MM-DD',
       'GET  /api/admin/status  (x-admin-key header required)',
       'POST /api/admin/stop    (x-admin-key header required)',
@@ -330,6 +402,8 @@ async function startServer() {
       console.log('    GET  /api/history');
       console.log('    GET  /api/date/:date');
       console.log('    GET  /api/insights');
+      console.log('    GET  /api/insights/monthly');
+      console.log('    GET  /api/insights/monthly/:month');
       console.log('    GET  /api/topic/:id?date=YYYY-MM-DD');
       console.log('\n  Admin (requires x-admin-key header):');
       console.log('    GET  /api/admin/status');
