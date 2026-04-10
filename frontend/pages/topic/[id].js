@@ -67,7 +67,7 @@ export default function TopicDetailPage() {
           </span>
         </div>
 
-        <PageHeader label="Topic Detail" title={topic.title} meta={topic.date || date || ''} />
+        <PageHeader label="Intelligence Brief" title={topic.title} meta={topic.date || date || ''} />
 
         <div className="mb-6 rounded-panel border border-primary/35 bg-primary/10 p-4">
           <p className="text-sm leading-relaxed text-on-surface">{topic.summary}</p>

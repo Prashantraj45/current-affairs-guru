@@ -1,12 +1,11 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { BookOpenText, Clock3, Compass, House } from 'lucide-react';
+import { BookOpenText, Clock3, House } from 'lucide-react';
 
 const ITEMS = [
-  { href: '/', label: 'Synthesize', Icon: House },
-  { href: '/history', label: 'Archive', Icon: Clock3 },
-  { href: '/intel-canvas', label: 'Canvas', Icon: BookOpenText },
-  { href: '/core', label: 'Core', Icon: Compass },
+  { href: '/', label: 'Daily Brief', Icon: House },
+  { href: '/history', label: 'Chronicle', Icon: Clock3 },
+  { href: '/intel-canvas', label: 'Signal Deck', Icon: BookOpenText },
 ];
 
 export default function MobileBottomNav() {

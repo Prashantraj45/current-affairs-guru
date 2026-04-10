@@ -1,8 +1,7 @@
 export const NAV_LINKS = [
-  { href: '/', label: 'Synthesize' },
-  { href: '/history', label: 'Archive' },
-  { href: '/intel-canvas', label: 'Intel Canvas' },
-  { href: '/core', label: 'Core Atlas' },
+  { href: '/', label: 'Daily Brief' },
+  { href: '/history', label: 'Chronicle' },
+  { href: '/intel-canvas', label: 'Signal Deck' },
 ];
 
 export const CATEGORY_COLORS = {

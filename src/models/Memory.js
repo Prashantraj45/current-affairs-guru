@@ -5,6 +5,7 @@ const memorySchema = new mongoose.Schema({
   date: String,
   trends: [String],
   recurringThemes: [String],
+  highFrequencyTopics: [String],
   strategyNotes: [String],
   highPriorityDomains: [String],
   updatedAt: { type: Date, default: Date.now }

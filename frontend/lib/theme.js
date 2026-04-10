@@ -5,20 +5,16 @@ const ThemeContext = createContext({
   toggleTheme: () => {},
 });
 
-const isDarkPreferred = () => {
-  if (typeof window === 'undefined') return true;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
-};
-
 const getInitialTheme = () => {
-  if (typeof window === 'undefined') return 'dark';
+  if (typeof window === 'undefined') return 'light';
   const stored = window.localStorage.getItem('theme');
   if (stored === 'dark' || stored === 'light') return stored;
-  return isDarkPreferred() ? 'dark' : 'light';
+  // Fallback to system preference only when no stored value
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 };
 
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState('light');
 
   useEffect(() => {
     setTheme(getInitialTheme());

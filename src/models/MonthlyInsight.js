@@ -4,6 +4,7 @@ const monthlyInsightSchema = new mongoose.Schema({
   month: { type: String, unique: true, index: true }, // YYYY-MM
   trends: [String],
   recurringThemes: [String],
+  highFrequencyTopics: [String],
   strategyNotes: [String],
   highPriorityDomains: [String],
   sourceDates: [String],

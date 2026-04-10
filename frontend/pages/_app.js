@@ -8,7 +8,7 @@ export default function MyApp({ Component, pageProps }) {
   return (
     <ThemeProvider>
       <Head>
-        <title>Synthetix Intel</title>
+        <title>Civil Lens</title>
       </Head>
       <AuthGuard>
         <AppShell>

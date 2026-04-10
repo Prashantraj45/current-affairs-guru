@@ -24,24 +24,24 @@ export async function refreshMonthlyInsights(month) {
   const regex = new RegExp(`^${month}-\\d{2}$`);
   const entries = await Entry.find({ date: regex }, { date: 1, insights: 1 }).sort({ date: 1 });
 
-  const trends = aggregateStrings(entries.flatMap((entry) => entry.insights?.trends || []));
-  const recurringThemes = aggregateStrings(
-    entries.flatMap((entry) => entry.insights?.recurringThemes || [])
-  );
-  const strategyNotes = aggregateStrings(
-    entries.flatMap((entry) => entry.insights?.strategyNotes || []),
-    16
-  );
-  const highPriorityDomains = aggregateStrings(
-    entries.flatMap((entry) => entry.insights?.highPriorityDomains || []),
+  const trends = aggregateStrings(entries.flatMap((e) => e.insights?.trends || []));
+  const recurringThemes = aggregateStrings(entries.flatMap((e) => e.insights?.recurringThemes || []));
+  const highFrequencyTopics = aggregateStrings(
+    entries.flatMap((e) => e.insights?.highFrequencyTopics || []),
     10
   );
-  const sourceDates = entries.map((entry) => entry.date);
+  const strategyNotes = aggregateStrings(entries.flatMap((e) => e.insights?.strategyNotes || []), 16);
+  const highPriorityDomains = aggregateStrings(
+    entries.flatMap((e) => e.insights?.highPriorityDomains || []),
+    10
+  );
+  const sourceDates = entries.map((e) => e.date);
 
   const payload = {
     month,
     trends,
     recurringThemes,
+    highFrequencyTopics,
     strategyNotes,
     highPriorityDomains,
     sourceDates,
@@ -63,16 +63,41 @@ export async function connectDB() {
   }
 }
 
-export async function saveEntry(entry) {
+/**
+ * Generate lightweight cards from topics array.
+ * Cards = compact references for homepage display.
+ */
+function generateCards(topics = []) {
+  return topics.map((t) => ({
+    id: t.id,
+    title: t.title,
+    type: t.type || 'topic',
+    shortSummary: t.summary ? t.summary.substring(0, 120) : (t.revision_note || ''),
+    tags: (t.tags || []).slice(0, 3),
+    importance: t.importance,
+  }));
+}
+
+export async function saveEntry(entry, date) {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const targetDate = date || new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const topics = entry.topics || [];
+    const cards = entry.cards?.length ? entry.cards : generateCards(topics);
     const result = await Entry.findOneAndUpdate(
-      { date: today },
-      { date: today, topics: entry.topics || [], insights: entry.insights || {}, updatedAt: new Date() },
+      { date: targetDate },
+      {
+        date: targetDate,
+        topics,
+        cards,
+        mcqs: entry.mcqs || [],
+        caseStudies: entry.caseStudies || [],
+        insights: entry.insights || {},
+        updatedAt: new Date(),
+      },
       { upsert: true, new: true }
     );
-    await refreshMonthlyInsights(monthFromDate(today));
-    console.log(`Entry saved: ${result.topics.length} topics`);
+    await refreshMonthlyInsights(monthFromDate(targetDate));
+    console.log(`Entry saved: ${result.topics.length} topics, ${result.cards.length} cards for ${targetDate}`);
     return result;
   } catch (error) {
     console.error('Error saving entry:', error);
@@ -99,10 +124,16 @@ export async function getAllEntries() {
 }
 
 // Lightweight projection for history list — no heavy content fields
-export async function getHistoryEntries() {
+export async function getHistoryEntries({ start, end } = {}) {
   try {
+    const filter = {};
+    if (start || end) {
+      filter.date = {};
+      if (start) filter.date.$gte = start;
+      if (end) filter.date.$lte = end;
+    }
     return await Entry.find(
-      {},
+      filter,
       { date: 1, 'topics.id': 1, 'topics.title': 1, 'topics.category': 1, 'topics.importance': 1 }
     ).sort({ date: -1 });
   } catch (error) {
@@ -133,9 +164,20 @@ export async function entryExists(date) {
 export async function writeREADME(insights) {
   try {
     const today = new Date().toISOString().split('T')[0];
+    // Accept both signalDeck and insights shapes
+    const data = insights || {};
     await Memory.findOneAndUpdate(
       { type: 'system_memory' },
-      { type: 'system_memory', date: today, ...insights, updatedAt: new Date() },
+      {
+        type: 'system_memory',
+        date: today,
+        trends: data.trends || [],
+        recurringThemes: data.recurringThemes || [],
+        highFrequencyTopics: data.highFrequencyTopics || [],
+        strategyNotes: data.strategyNotes || [],
+        highPriorityDomains: data.highPriorityDomains || [],
+        updatedAt: new Date(),
+      },
       { upsert: true, new: true }
     );
     console.log('Memory updated');
@@ -159,8 +201,9 @@ export async function readREADME() {
     return {
       trends: memory.trends || [],
       recurringThemes: memory.recurringThemes || [],
+      highFrequencyTopics: memory.highFrequencyTopics || [],
       strategyNotes: memory.strategyNotes || [],
-      highPriorityDomains: memory.highPriorityDomains || []
+      highPriorityDomains: memory.highPriorityDomains || [],
     };
   } catch (error) {
     console.error('Error reading memory:', error);

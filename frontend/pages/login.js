@@ -31,9 +31,9 @@ export default function LoginPage() {
         <div className="mx-auto mb-4 flex h-16 w-16 animate-float items-center justify-center rounded-2xl bg-primary/15 text-primary">
           <Atom className="h-8 w-8 animate-pulseSoft" />
         </div>
-        <h1 className="font-headline text-5xl text-on-surface">Synthetix Intel</h1>
+        <h1 className="font-headline text-5xl text-on-surface">Civil Lens</h1>
         <p className="mt-2 font-headline text-xl italic text-on-surface-variant">
-          Synthesize. Archive. Decode the signal.
+          Analyse. Chronicle. Decode the signal.
         </p>
         <div className="mt-8 flex justify-center">
           <GoogleSignIn />

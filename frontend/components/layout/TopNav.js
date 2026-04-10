@@ -16,21 +16,22 @@ function ThemeSlider() {
     <button
       type="button"
       onClick={toggleTheme}
-      className="tap-target relative h-10 w-[74px] rounded-full border border-outline-variant bg-surface-high/90 p-1"
+      className="relative h-8 w-16 rounded-full border border-outline-variant bg-surface-high/90"
       aria-label="Toggle theme"
+      style={{ minWidth: 64, minHeight: 32 }}
     >
-      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant">
-        <Moon className="h-3.5 w-3.5" />
+      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-on-surface-variant">
+        <Moon className="h-3 w-3" />
       </span>
-      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant">
-        <Sun className="h-3.5 w-3.5" />
+      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant">
+        <Sun className="h-3 w-3" />
       </span>
       <span
-        className={`absolute left-1 top-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-on-primary shadow transition-transform duration-300 ${
-          isLight ? 'translate-x-[34px]' : 'translate-x-0'
+        className={`absolute top-[3px] flex h-[26px] w-[26px] items-center justify-center rounded-full bg-primary text-on-primary shadow transition-transform duration-300 ${
+          isLight ? 'left-[3px] translate-x-[32px]' : 'left-[3px] translate-x-0'
         }`}
       >
-        {isLight ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        {isLight ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
       </span>
     </button>
   );
@@ -103,7 +104,7 @@ function NavContent({ user, localMode = false }) {
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
             <Atom className="h-4 w-4" />
           </span>
-          <span className="font-headline text-xl">Synthetix Intel</span>
+          <span className="font-headline text-xl">Civil Lens</span>
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">
