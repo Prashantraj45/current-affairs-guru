@@ -4,8 +4,17 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { secretManager } from '../../config/secrets.js';
-import { connectDB, getEntry, getHistoryEntries, getLatestEntry, readREADME } from '../db/db.js';
-import { getJobStatus as getSchedulerStatus, startScheduler as initScheduler, stopScheduler as stopJob } from '../services/scheduler.js';
+import {
+  connectDB,
+  getEntry,
+  getHistoryEntries,
+  getLatestEntry,
+  getMonthlyInsights,
+  listMonthlyInsights,
+  readREADME,
+  refreshMonthlyInsights
+} from '../db/db.js';
+import { getJobStatus as getSchedulerStatus, runDailyJob, startScheduler as initScheduler, stopScheduler as stopJob } from '../services/scheduler.js';
 config({ override: true });
 
 const app = express();
@@ -149,20 +158,30 @@ app.get('/api/today', async (req, res) => {
     if (!latest) {
       return res.status(404).json({ error: 'No data available yet. Run the daily job first.' });
     }
+    const ins = latest.insights || {};
     res.json({
       date: latest.date,
       topics: latest.topics || [],
-      insights: latest.insights || {}
+      cards: latest.cards || [],
+      mcqs: latest.mcqs || [],
+      caseStudies: latest.caseStudies || [],
+      insights: ins,                   // backward compat
+      signalDeck: ins,                 // new canonical name
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get all history
+// Get history — optional ?start=YYYY-MM-DD&end=YYYY-MM-DD
 app.get('/api/history', async (req, res) => {
   try {
-    const entries = await getHistoryEntries();
+    const { start, end } = req.query;
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    const filter = {};
+    if (start && dateRe.test(start)) filter.start = start;
+    if (end && dateRe.test(end)) filter.end = end;
+    const entries = await getHistoryEntries(filter);
     res.json({
       total: entries.length,
       entries: entries.map(e => ({
@@ -204,7 +223,71 @@ app.get('/api/insights', async (req, res) => {
     if (!memory) {
       return res.status(404).json({ error: 'No insights available yet' });
     }
-    res.json(memory);
+    res.json({ ...memory, signalDeck: memory }); // alias for new clients
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get monthly insights index and default month payload
+app.get('/api/insights/monthly', async (req, res) => {
+  try {
+    const monthsDocs = await listMonthlyInsights();
+    const months = monthsDocs.map((doc) => doc.month);
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const selectedMonth = months.includes(currentMonth) ? currentMonth : months[0] || currentMonth;
+    const selectedDoc = await getMonthlyInsights(selectedMonth);
+
+    res.json({
+      months: months.length ? months : [currentMonth],
+      currentMonth,
+      selectedMonth,
+      insights: selectedDoc
+        ? {
+            month: selectedDoc.month,
+            trends: selectedDoc.trends || [],
+            recurringThemes: selectedDoc.recurringThemes || [],
+            highFrequencyTopics: selectedDoc.highFrequencyTopics || [],
+            strategyNotes: selectedDoc.strategyNotes || [],
+            highPriorityDomains: selectedDoc.highPriorityDomains || [],
+            sourceDates: selectedDoc.sourceDates || [],
+            updatedAt: selectedDoc.updatedAt
+          }
+        : {
+            month: selectedMonth,
+            trends: [],
+            recurringThemes: [],
+            highFrequencyTopics: [],
+            strategyNotes: [],
+            highPriorityDomains: [],
+            sourceDates: [],
+            updatedAt: new Date().toISOString()
+          }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get monthly insights by month (YYYY-MM)
+app.get('/api/insights/monthly/:month', async (req, res) => {
+  try {
+    const { month } = req.params;
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'Invalid month format. Use YYYY-MM' });
+    }
+
+    const doc = await refreshMonthlyInsights(month);
+    res.json({
+      month,
+      trends: doc?.trends || [],
+      recurringThemes: doc?.recurringThemes || [],
+      highFrequencyTopics: doc?.highFrequencyTopics || [],
+      strategyNotes: doc?.strategyNotes || [],
+      highPriorityDomains: doc?.highPriorityDomains || [],
+      sourceDates: doc?.sourceDates || [],
+      updatedAt: doc?.updatedAt || new Date().toISOString()
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -285,6 +368,36 @@ app.post('/api/admin/stop', verifyAdminKey, async (req, res) => {
   }
 });
 
+/**
+ * Admin: Trigger job for a specific date (or yesterday if omitted)
+ * Body: { "date": "YYYY-MM-DD" }  (optional)
+ */
+app.post('/api/admin/run', verifyAdminKey, async (req, res) => {
+  const { date } = req.body || {};
+
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+  }
+
+  const status = await getSchedulerStatus();
+  if (status.running) {
+    return res.status(409).json({ error: 'Job already running', lock: status.lock });
+  }
+
+  const targetDate = date || new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  console.log(`▶ Manual job triggered for ${targetDate} at ${new Date().toISOString()}`);
+
+  // Fire and forget — job is long-running
+  runDailyJob(targetDate).catch((err) => console.error('Manual job error:', err.message));
+
+  res.json({
+    status: 'started',
+    targetDate,
+    message: `Job started for ${targetDate}. Poll /api/admin/status for progress.`,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
@@ -295,9 +408,12 @@ app.use((req, res) => {
       'GET  /api/history',
       'GET  /api/date/:date',
       'GET  /api/insights',
+      'GET  /api/insights/monthly',
+      'GET  /api/insights/monthly/:month',
       'GET  /api/topic/:id?date=YYYY-MM-DD',
-      'GET  /api/admin/status  (x-admin-key header required)',
-      'POST /api/admin/stop    (x-admin-key header required)',
+      'GET  /api/admin/status             (x-admin-key header required)',
+      'POST /api/admin/stop               (x-admin-key header required)',
+      'POST /api/admin/run                (x-admin-key header required, body: { date?: "YYYY-MM-DD" })',
     ]
   });
 });
@@ -330,6 +446,8 @@ async function startServer() {
       console.log('    GET  /api/history');
       console.log('    GET  /api/date/:date');
       console.log('    GET  /api/insights');
+      console.log('    GET  /api/insights/monthly');
+      console.log('    GET  /api/insights/monthly/:month');
       console.log('    GET  /api/topic/:id?date=YYYY-MM-DD');
       console.log('\n  Admin (requires x-admin-key header):');
       console.log('    GET  /api/admin/status');

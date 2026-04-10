@@ -36,8 +36,13 @@ export function stopScheduler() {
   }
 }
 
-export async function runDailyJob() {
-  const today = new Date().toISOString().split('T')[0];
+/**
+ * Run the daily intelligence job for a specific date.
+ * @param {string} [targetDate] YYYY-MM-DD — defaults to yesterday UTC
+ */
+export async function runDailyJob(targetDate) {
+  // Default: yesterday UTC (CA sites publish previous day's content)
+  const jobDate = targetDate || new Date(Date.now() - 86400000).toISOString().split('T')[0];
   let lockAcquired = false;
 
   try {
@@ -52,7 +57,6 @@ export async function runDailyJob() {
       return;
     }
 
-    // Step 0b: Check if today's data exists
     console.log('\n[CHECK] Verifying today\'s data doesn\'t already exist...');
     const exists = await entryExists(today);
     if (exists) {
@@ -63,12 +67,13 @@ export async function runDailyJob() {
 
     console.log('\n========================================');
     console.log('UPSC Daily Intelligence Job Started');
+    console.log('Target Date:', jobDate);
     console.log('Time:', new Date().toISOString());
     console.log('========================================');
 
-    // Step 1: Fetch news
-    console.log('\n[STEP 1] Fetching news from RSS feeds...');
-    const newsBatch = await fetchNews(15);
+    // Step 1: Fetch news for target date
+    console.log(`\n[STEP 1] Fetching news for ${jobDate}...`);
+    const newsBatch = await fetchNews(15, jobDate);
     console.log(`✓ Fetched ${newsBatch.length} news items`);
 
     if (newsBatch.length === 0) {
@@ -94,10 +99,12 @@ export async function runDailyJob() {
 
     console.log('✓ AI processing completed');
 
-    // Step 4: Update memory with latest insights
+    // Step 4: Update memory with latest signal deck / insights
     console.log('\n[STEP 4] Updating system memory...');
-    if (claudeOutput.insights) {
-      await writeREADME(claudeOutput.insights);
+    // AI may return signalDeck (new) or insights (legacy); validateDeepSeekResponse normalises both to insights
+    const memoryData = claudeOutput.insights || claudeOutput.signalDeck;
+    if (memoryData) {
+      await writeREADME(memoryData);
       console.log('✓ Memory updated');
     }
 
@@ -105,11 +112,14 @@ export async function runDailyJob() {
     console.log('\n[STEP 5] Saving to database...');
     const entry = {
       topics: claudeOutput.topics || [],
-      insights: claudeOutput.insights || {}
+      mcqs: claudeOutput.mcqs || [],
+      caseStudies: claudeOutput.caseStudies || [],
+      insights: claudeOutput.insights || {},
+      // cards are auto-generated in saveEntry from topics if not provided
     };
 
-    await saveEntry(entry);
-    console.log(`✓ Saved ${entry.topics.length} topics`);
+    await saveEntry(entry, jobDate);
+    console.log(`✓ Saved ${entry.topics.length} topics for ${jobDate}`);
 
     // Step 6: Summary
     console.log('\n========================================');

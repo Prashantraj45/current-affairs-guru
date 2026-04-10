@@ -31,7 +31,7 @@ export async function callDeepSeek(compressedNews, compressedMemory) {
     `DATE: ${today}`,
     `NEWS: ${JSON.stringify(compressedNews)}`,
     compressedMemory ? `MEMORY: ${JSON.stringify(compressedMemory)}` : null,
-    `Analyze these news for UPSC. Return JSON with "topics" (max 5, HIGH signal only) and "insights" (trends/recurringThemes/strategyNotes/highPriorityDomains arrays).`
+    `Analyze, merge, and classify. Return JSON with: "topics" (max 8, typed, with backgroundContext/editorialInsights/interlinkages), "mcqs" (5-8 standalone practice questions), "caseStudies" (3-4 policy deep dives), "signalDeck" (trends/recurringThemes/highFrequencyTopics/strategyNotes/highPriorityDomains/editorialPatterns).`,
   ].filter(Boolean).join('\n');
 
   const messages = [
@@ -42,7 +42,7 @@ export async function callDeepSeek(compressedNews, compressedMemory) {
   const requestOptions = {
     model: 'deepseek-chat',
     messages,
-    max_tokens: 3000,
+    max_tokens: 6000,
   };
 
   const payloadSize = JSON.stringify(requestOptions).length;
@@ -62,9 +62,16 @@ export async function callDeepSeek(compressedNews, compressedMemory) {
 export function validateDeepSeekResponse(output) {
   if (!output || typeof output !== 'object') return false;
   const topics = output.topics;
-  if (!Array.isArray(topics) || topics.length < 3) {
+  if (!Array.isArray(topics) || topics.length < 2) {
     console.warn(`[DeepSeek] Insufficient topics: ${topics?.length ?? 0}`);
     return false;
   }
+  // Normalise: accept signalDeck or legacy insights key
+  if (output.signalDeck && !output.insights) {
+    output.insights = output.signalDeck;
+  }
+  // mcqs and caseStudies are optional — don't fail validation if missing
+  if (!Array.isArray(output.mcqs)) output.mcqs = [];
+  if (!Array.isArray(output.caseStudies)) output.caseStudies = [];
   return true;
 }

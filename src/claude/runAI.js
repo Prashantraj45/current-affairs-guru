@@ -1,31 +1,47 @@
 import crypto from 'crypto';
 import { callDeepSeek, validateDeepSeekResponse } from './providers/deepseek.js';
 
-// In-process cache: skip if same news batch processed already this session
 let _lastNewsHash = null;
 
 // ─── Input Compression ───────────────────────────────────────────────────────
 
 /**
- * Compress news batch: strip HTML, trim fields, cap batch at 8 items.
+ * Compress news batch: strip HTML, deduplicate titles, cap at 8.
+ * Source diversity is handled upstream by fetchNews (interleaved order).
  */
 export function compressNews(batch) {
-  const stripHtml = (str) => (str || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-  return batch.slice(0, 5).map((item) => ({
-    t: stripHtml(item.title).substring(0, 80),
-    s: stripHtml(item.summary || item.description || '').substring(0, 100),
-  }));
+  const stripHtml = (s) => (s || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  const seen = new Set();
+  const result = [];
+
+  for (const item of batch) {
+    if (result.length >= 8) break;
+    const t = stripHtml(item.title).substring(0, 90);
+    if (t.length < 10) continue;
+    const key = t.slice(0, 50).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({
+      t,
+      s: stripHtml(item.summary || item.description || '').substring(0, 120),
+      src: (item.source || '').substring(0, 20),
+    });
+  }
+
+  return result;
 }
 
 /**
- * Compress previous README: 2-3 items only.
+ * Compress memory: send only last 3 trends + 3 recurring + 2 highFrequency.
+ * Prevents token bloat from accumulated history.
  */
 export function compressMemory(readme) {
   if (!readme) return null;
-  return {
-    trends: (readme.trends || readme.key_trends || []).slice(0, 3),
-    recurring: (readme.recurringThemes || readme.recurring_topics || []).slice(0, 2),
-  };
+  const trends = (readme.trends || readme.key_trends || []).slice(0, 3);
+  const recurring = (readme.recurringThemes || readme.recurring_topics || []).slice(0, 3);
+  const highFreq = (readme.highFrequencyTopics || []).slice(0, 2);
+  if (!trends.length && !recurring.length) return null;
+  return { trends, recurring, ...(highFreq.length ? { highFreq } : {}) };
 }
 
 function hashNews(batch) {
@@ -35,18 +51,12 @@ function hashNews(batch) {
 
 // ─── Main Orchestrator ───────────────────────────────────────────────────────
 
-/**
- * Primary export used by scheduler.
- * Handles: skip logic → compression → DeepSeek call → validate → retry once.
- */
 export async function processNewsBatch(newsBatch, previousREADME = null) {
-  // Skip: insufficient news
-  if (!newsBatch || newsBatch.length < 5) {
+  if (!newsBatch || newsBatch.length < 3) {
     console.log(`[AI] Skip — insufficient news (${newsBatch?.length ?? 0} items)`);
     return null;
   }
 
-  // Skip: same news hash (duplicate run in same process)
   const hash = hashNews(newsBatch);
   if (_lastNewsHash && _lastNewsHash === hash) {
     console.log('[AI] Skip — news hash unchanged');
@@ -58,11 +68,9 @@ export async function processNewsBatch(newsBatch, previousREADME = null) {
 
   console.log(`[AI] Provider: deepseek-chat | Items: ${compressedNews.length} | Memory: ${compressedMemory ? 'yes' : 'none'}`);
 
-  // Attempt 1
   let output = await _tryDeepSeek(compressedNews, compressedMemory);
   if (output) { _lastNewsHash = hash; return output; }
 
-  // Retry once on failure
   console.warn('[AI] Retrying once...');
   output = await _tryDeepSeek(compressedNews, compressedMemory);
   if (output) { _lastNewsHash = hash; return output; }
@@ -75,7 +83,8 @@ async function _tryDeepSeek(compressedNews, compressedMemory) {
   try {
     const output = await callDeepSeek(compressedNews, compressedMemory);
     if (validateDeepSeekResponse(output)) {
-      console.log(`[AI] ✓ Valid response — ${output.topics.length} topics`);
+      const count = output.topics?.length ?? 0;
+      console.log(`[AI] ✓ Valid response — ${count} topics`);
       return output;
     }
     console.warn('[AI] Response failed validation');
