@@ -98,7 +98,7 @@ function NavContent({ user, localMode = false }) {
   const router = useRouter();
 
   return (
-    <header className="sticky top-0 z-50 border-b border-outline-variant bg-surface/85 backdrop-blur-xl">
+    <header className="fixed inset-x-0 top-0 z-50 w-full border-b border-outline-variant bg-surface/85 backdrop-blur-xl">
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 md:px-6">
         <Link href="/" className="tap-target flex items-center gap-2 text-on-surface">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">

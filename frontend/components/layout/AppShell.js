@@ -13,7 +13,7 @@ export default function AppShell({ children }) {
   return (
     <div className="min-h-screen bg-surface text-on-surface">
       <TopNav />
-      <main className="mx-auto w-full max-w-7xl px-4 pb-24 pt-6 md:px-6 md:pt-8 lg:pb-10">{children}</main>
+      <main className="mx-auto w-full max-w-7xl px-4 pb-24 pt-20 md:px-6 md:pt-24 lg:pb-10">{children}</main>
       <MobileBottomNav />
     </div>
   );
