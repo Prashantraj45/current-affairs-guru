@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Heart, Copy, Check } from 'lucide-react';
 import Head from 'next/head';
 
-const UPI_ID = 'your-upi-id@upi'; // replace with your actual UPI ID
+const UPI_ID = 'prashantofficalraj@oksbi';
 
 export default function DonatePage() {
   const [copied, setCopied] = useState(false);
@@ -33,7 +33,7 @@ export default function DonatePage() {
             <div className="rounded-xl border border-outline-variant bg-surface-mid p-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/upi-qr.png"
+                src="../my-upi.png"
                 alt="UPI QR Code"
                 width={180}
                 height={180}
