@@ -9,7 +9,7 @@ import {
   signInWithRedirect,
 } from 'firebase/auth';
 
-export const oauthDisabled = process.env.NEXT_PUBLIC_DISABLE_OAUTH_LOCAL === 'true';
+export const oauthDisabled = process.env.NEXT_PUBLIC_DISABLE_OAUTH_LOCAL === 'true' || process.env.NEXT_PUBLIC_DISABLE_OAUTH_LOCAL === true;
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
