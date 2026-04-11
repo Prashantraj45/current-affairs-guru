@@ -1,39 +1,45 @@
 import crypto from 'crypto';
-import { callDeepSeek, validateDeepSeekResponse } from './providers/deepseek.js';
+import { callBatchTopics, callCaseStudies, callMCQs, callInsights, validateDeepSeekResponse } from './providers/deepseek.js';
 
 let _lastNewsHash = null;
 
-// ─── Input Compression ───────────────────────────────────────────────────────
+// ─── News Compression ─────────────────────────────────────────────────────────
 
 /**
- * Compress news batch: strip HTML, deduplicate titles, cap at 8.
- * Source diversity is handled upstream by fetchNews (interleaved order).
+ * Strip HTML and normalise a single news item for the AI.
+ * Keeps title (90 chars), summary (200 chars), source.
  */
-export function compressNews(batch) {
-  const stripHtml = (s) => (s || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-  const seen = new Set();
-  const result = [];
-
-  for (const item of batch) {
-    if (result.length >= 8) break;
-    const t = stripHtml(item.title).substring(0, 90);
-    if (t.length < 10) continue;
-    const key = t.slice(0, 50).toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push({
-      t,
-      s: stripHtml(item.summary || item.description || '').substring(0, 120),
-      src: (item.source || '').substring(0, 20),
-    });
-  }
-
-  return result;
+function compressItem(item) {
+  const strip = (s) => (s || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  return {
+    t: strip(item.title).substring(0, 90),
+    s: strip(item.summary || item.description || '').substring(0, 200),
+    src: (item.source || '').substring(0, 30),
+  };
 }
 
 /**
- * Compress memory: send only last 3 trends + 3 recurring + 2 highFrequency.
- * Prevents token bloat from accumulated history.
+ * Split news items into batches of `size` for parallel Pass 1 calls.
+ * Deduplicates by title before splitting.
+ */
+function splitIntoBatches(items, size = 8) {
+  const seen = new Set();
+  const unique = items.filter((item) => {
+    const key = (item.title || item.t || '').toLowerCase().slice(0, 50);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const batches = [];
+  for (let i = 0; i < unique.length; i += size) {
+    batches.push(unique.slice(i, i + size).map(compressItem));
+  }
+  return batches;
+}
+
+/**
+ * Compress memory for context injection (legacy / unchanged).
  */
 export function compressMemory(readme) {
   if (!readme) return null;
@@ -44,13 +50,48 @@ export function compressMemory(readme) {
   return { trends, recurring, ...(highFreq.length ? { highFreq } : {}) };
 }
 
-function hashNews(batch) {
-  const key = batch.map((n) => n.title || '').join('|');
+// ─── Topic Merging ────────────────────────────────────────────────────────────
+
+/**
+ * Deduplicate topics across batches by slug/title similarity.
+ * Keeps the entry with the higher score.
+ */
+function mergeTopics(batches) {
+  const map = new Map();
+
+  for (const topic of batches.flat()) {
+    if (!topic || !topic.title) continue;
+    const key = (topic.id || topic.title).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40);
+    const existing = map.get(key);
+    if (!existing || (topic.score || 0) > (existing.score || 0)) {
+      map.set(key, topic);
+    }
+  }
+
+  return [...map.values()].sort((a, b) => (b.score || 0) - (a.score || 0));
+}
+
+// ─── Hash ─────────────────────────────────────────────────────────────────────
+
+function hashNews(items) {
+  const key = items.map((n) => n.title || '').join('|');
   return crypto.createHash('md5').update(key).digest('hex');
 }
 
 // ─── Main Orchestrator ───────────────────────────────────────────────────────
 
+/**
+ * Three-pass batched pipeline:
+ *
+ * Pass 1 — Topic extraction (deepseek-chat, parallel batches of 8)
+ *   → All unique UPSC topics across all news items
+ *
+ * Pass 2 — Case studies (deepseek-reasoner, single call)
+ *   → 5-6 deep policy/governance case studies
+ *
+ * Pass 3 — MCQs + Insights (deepseek-chat, two parallel calls)
+ *   → 8-12 standalone MCQs + signalDeck
+ */
 export async function processNewsBatch(newsBatch, previousREADME = null) {
   if (!newsBatch || newsBatch.length < 3) {
     console.log(`[AI] Skip — insufficient news (${newsBatch?.length ?? 0} items)`);
@@ -63,39 +104,69 @@ export async function processNewsBatch(newsBatch, previousREADME = null) {
     return null;
   }
 
-  const compressedNews = compressNews(newsBatch);
-  const compressedMemory = compressMemory(previousREADME);
+  const batches = splitIntoBatches(newsBatch, 8);
+  console.log(`[AI] Pass 1 — ${batches.length} topic batches × deepseek-chat (parallel)`);
 
-  console.log(`[AI] Provider: deepseek-chat | Items: ${compressedNews.length} | Memory: ${compressedMemory ? 'yes' : 'none'}`);
+  // ── Pass 1: Topic extraction (all batches in parallel) ──────────────────────
+  const batchResults = await Promise.allSettled(
+    batches.map(async (batch, i) => {
+      try {
+        const topics = await callBatchTopics(batch);
+        console.log(`  [Batch ${i + 1}/${batches.length}] ✓ ${topics.length} topics`);
+        return topics;
+      } catch (err) {
+        console.error(`  [Batch ${i + 1}/${batches.length}] ✗ ${err.message}`);
+        return [];
+      }
+    })
+  );
 
-  let output = await _tryDeepSeek(compressedNews, compressedMemory);
-  if (output) { _lastNewsHash = hash; return output; }
+  const allTopicBatches = batchResults.map((r) => (r.status === 'fulfilled' ? r.value : []));
+  const topics = mergeTopics(allTopicBatches);
 
-  console.warn('[AI] Retrying once...');
-  output = await _tryDeepSeek(compressedNews, compressedMemory);
-  if (output) { _lastNewsHash = hash; return output; }
-
-  console.error('[AI] Both attempts failed');
-  return null;
-}
-
-async function _tryDeepSeek(compressedNews, compressedMemory) {
-  try {
-    const output = await callDeepSeek(compressedNews, compressedMemory);
-    if (validateDeepSeekResponse(output)) {
-      const count = output.topics?.length ?? 0;
-      console.log(`[AI] ✓ Valid response — ${count} topics`);
-      return output;
-    }
-    console.warn('[AI] Response failed validation');
-    return null;
-  } catch (err) {
-    console.error('[AI] Error:', err.message);
+  if (topics.length < 2) {
+    console.error(`[AI] Pass 1 failed — only ${topics.length} topics extracted`);
     return null;
   }
+
+  console.log(`[AI] Pass 1 complete — ${topics.length} unique topics after merge`);
+
+  // ── Pass 2: Case studies (reasoner) + Pass 3a: MCQs + Pass 3b: Insights (parallel) ──
+  console.log('[AI] Pass 2 — case studies via deepseek-reasoner');
+  console.log('[AI] Pass 3 — MCQs + insights via deepseek-chat (parallel with Pass 2)');
+
+  const [caseStudyResult, mcqResult, insightsResult] = await Promise.allSettled([
+    callCaseStudies(topics),
+    callMCQs(topics),
+    callInsights(topics),
+  ]);
+
+  const caseStudies = caseStudyResult.status === 'fulfilled' ? caseStudyResult.value : [];
+  const mcqs = mcqResult.status === 'fulfilled' ? mcqResult.value : [];
+  const signalDeck = insightsResult.status === 'fulfilled' ? insightsResult.value : {};
+
+  console.log(`[AI] ✓ Topics: ${topics.length} | Case Studies: ${caseStudies.length} | MCQs: ${mcqs.length}`);
+
+  if (caseStudyResult.status === 'rejected') console.error('[AI] Case studies failed:', caseStudyResult.reason?.message);
+  if (mcqResult.status === 'rejected') console.error('[AI] MCQs failed:', mcqResult.reason?.message);
+  if (insightsResult.status === 'rejected') console.error('[AI] Insights failed:', insightsResult.reason?.message);
+
+  _lastNewsHash = hash;
+
+  return {
+    topics,
+    caseStudies,
+    mcqs,
+    signalDeck,
+    insights: signalDeck,
+  };
 }
 
-// ─── Backward Compat ─────────────────────────────────────────────────────────
+// ─── Legacy shims ─────────────────────────────────────────────────────────────
+
+export function compressNews(batch) {
+  return splitIntoBatches(batch, batch.length)[0] || [];
+}
 
 export async function validateAndParseOutput(rawOutput) {
   try {

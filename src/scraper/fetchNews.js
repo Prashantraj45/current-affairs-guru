@@ -1,6 +1,7 @@
 import https from 'https';
 import http from 'http';
 import Parser from 'rss-parser';
+import puppeteer from 'puppeteer';
 
 const parser = new Parser({
   timeout: 10000,
@@ -21,7 +22,7 @@ async function fetchRSS() {
     try {
       console.log(`Fetching RSS: ${feed.name}...`);
       const data = await parser.parseURL(feed.url);
-      data.items.slice(0, 8).forEach((item) => {
+      data.items.slice(0, 10).forEach((item) => {
         items.push({
           title: item.title || 'Untitled',
           summary: item.contentSnippet || item.description || '',
@@ -39,7 +40,7 @@ async function fetchRSS() {
 
 // ─── HTTP Fetch ───────────────────────────────────────────────────────────────
 
-function fetchUrl(url, timeoutMs = 10000) {
+function fetchUrl(url, timeoutMs = 12000) {
   return new Promise((resolve, reject) => {
     const lib = url.startsWith('https') ? https : http;
     const req = lib.get(url, {
@@ -63,11 +64,8 @@ function fetchUrl(url, timeoutMs = 10000) {
   });
 }
 
-// ─── HTML Content Extractor ───────────────────────────────────────────────────
+// ─── HTML Helpers ─────────────────────────────────────────────────────────────
 
-/**
- * Strip noise HTML — scripts, styles, nav, footer, sidebar, ads.
- */
 function stripNoise(html) {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
@@ -91,33 +89,28 @@ function stripTags(s) {
   return decodeHtml(s.replace(/<[^>]+>/g, ' '));
 }
 
-/**
- * Extract news sections from a CA daily analysis page.
- * Splits content by H2/H3 headings → each heading + following text = one news item.
- */
-function extractDailySections(html, source, maxSections = 8) {
+// ─── Section Extractor (H2/H3 based) ─────────────────────────────────────────
+
+const SKIP_HEADINGS = /^(home|menu|search|login|register|subscribe|share|tags|related|comments|advertisement|achievers|mains\s*&|interview|drishti specials|current affairs$|news analysis$|editorial$|prelims facts|rapid fire|daily updates|be mains ready|pib|summary|today|date|join|follow|download|pdf|video|about|contact|privacy|terms)/i;
+
+function extractDailySections(html, source, maxSections = 15) {
   const clean = stripNoise(html);
   const items = [];
-
-  // Split by h2 or h3 headings
   const sectionRe = /<h[23][^>]*>([\s\S]*?)<\/h[23]>([\s\S]*?)(?=<h[23]|$)/gi;
   let match;
 
   while ((match = sectionRe.exec(clean)) !== null && items.length < maxSections) {
     const rawTitle = stripTags(match[1]);
-    if (rawTitle.length < 15 || rawTitle.length > 200) continue;
-
-    // Skip navigation, sidebar, and structural headings (not actual topics)
-    if (/^(home|menu|search|login|register|subscribe|share|tags|related|comments|advertisement|achievers|mains\s*&|interview|drishti specials|current affairs$|news analysis$|editorial|prelims facts|rapid fire|daily updates|be mains ready|pib|summary|today|date|join|follow|download|pdf|video)/i.test(rawTitle)) continue;
+    if (rawTitle.length < 15 || rawTitle.length > 250) continue;
+    if (SKIP_HEADINGS.test(rawTitle)) continue;
 
     const sectionBody = match[2] || '';
-
-    // Collect text from <p> and <li> tags in this section
     const textParts = [];
     const pRe = /<(?:p|li)[^>]*>([\s\S]*?)<\/(?:p|li)>/gi;
     let pMatch;
     let charCount = 0;
-    while ((pMatch = pRe.exec(sectionBody)) !== null && charCount < 400) {
+
+    while ((pMatch = pRe.exec(sectionBody)) !== null && charCount < 600) {
       const text = stripTags(pMatch[1]);
       if (text.length > 20) {
         textParts.push(text);
@@ -125,18 +118,10 @@ function extractDailySections(html, source, maxSections = 8) {
       }
     }
 
-    const summary = textParts.slice(0, 4).join(' | ').substring(0, 350);
-
-    // Require real content — skip if no text beyond the title
+    const summary = textParts.slice(0, 5).join(' | ').substring(0, 500);
     if (!summary || summary.trim() === rawTitle.trim()) continue;
 
-    items.push({
-      title: rawTitle,
-      summary,
-      url: '',
-      source,
-      pubDate: new Date().toISOString(),
-    });
+    items.push({ title: rawTitle, summary, url: '', source, pubDate: new Date().toISOString() });
   }
 
   return items;
@@ -146,16 +131,11 @@ function extractDailySections(html, source, maxSections = 8) {
 
 const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
 
-/**
- * Parse a YYYY-MM-DD string as UTC midnight to avoid timezone shifts.
- * If no date provided, returns parts for yesterday UTC.
- */
 function getDateParts(isoDate) {
   let d;
   if (isoDate) {
     d = new Date(isoDate + 'T00:00:00Z');
   } else {
-    // Default: yesterday UTC
     d = new Date(Date.now() - 86400000);
   }
   const dd = String(d.getUTCDate()).padStart(2, '0');
@@ -166,17 +146,52 @@ function getDateParts(isoDate) {
   return { dd, mm, yyyy, dayNum, month };
 }
 
-// ─── CA Daily Fetcher ─────────────────────────────────────────────────────────
+// ─── Plain HTTP CA Sources ────────────────────────────────────────────────────
 
 const CA_SOURCES = [
-  { name: 'Drishti IAS',        getUrl: ({ dd, mm, yyyy }) => `https://www.drishtiias.com/current-affairs-news-analysis-editorials/news-analysis/${dd}-${mm}-${yyyy}` },
-  { name: 'Drishti Editorials', getUrl: ({ dd, mm, yyyy }) => `https://www.drishtiias.com/current-affairs-news-analysis-editorials/news-editorials/${yyyy}-${mm}-${dd}` },
-  { name: 'Insights IAS',       getUrl: ({ dd, mm, yyyy, dayNum, month }) => `https://www.insightsonindia.com/${yyyy}/${mm}/${dd}/upsc-current-affairs-${dayNum}-${month}-${yyyy}/` },
-  { name: 'Vision IAS',         getUrl: ({ dd, mm, yyyy }) => `https://visionias.in/current-affairs/upsc-daily-news-summary/${yyyy}-${mm}-${dd}` },
-  { name: 'Vajiram & Ravi',     getUrl: ({ dd, mm, yyyy }) => `https://vajiramandravi.com/current-affairs/upsc-mains-current-affairs/${yyyy}/${mm}/${dd}/` },
+  {
+    name: 'Drishti IAS - News Analysis',
+    getUrl: ({ dd, mm, yyyy }) => `https://www.drishtiias.com/current-affairs-news-analysis-editorials/news-analysis/${dd}-${mm}-${yyyy}`,
+  },
+  {
+    name: 'Drishti IAS - Editorials',
+    getUrl: ({ dd, mm, yyyy }) => `https://www.drishtiias.com/current-affairs-news-analysis-editorials/news-editorials/${yyyy}-${mm}-${dd}`,
+  },
+  {
+    name: 'Insights IAS',
+    getUrl: ({ dd, mm, yyyy, dayNum, month }) => `https://www.insightsonindia.com/${yyyy}/${mm}/${dd}/upsc-current-affairs-${dayNum}-${month}-${yyyy}/`,
+  },
+  {
+    name: 'Vision IAS - Daily Summary',
+    getUrl: ({ dd, mm, yyyy }) => `https://visionias.in/current-affairs/upsc-daily-news-summary/${yyyy}-${mm}-${dd}`,
+  },
+  {
+    name: 'Vision IAS - The Hindu',
+    getUrl: ({ dd, mm, yyyy }) => `https://visionias.in/current-affairs/upsc-daily-news-summary/${yyyy}-${mm}-${dd}/the-hindu`,
+  },
+  {
+    name: 'Vision IAS - Indian Express',
+    getUrl: ({ dd, mm, yyyy }) => `https://visionias.in/current-affairs/upsc-daily-news-summary/${yyyy}-${mm}-${dd}/the-indian-express`,
+  },
+  {
+    name: 'Vision IAS - Economic Times',
+    getUrl: ({ dd, mm, yyyy }) => `https://visionias.in/current-affairs/upsc-daily-news-summary/${yyyy}-${mm}-${dd}/the-economic-times`,
+  },
+  {
+    name: 'Vision IAS - Business Standard',
+    getUrl: ({ dd, mm, yyyy }) => `https://visionias.in/current-affairs/upsc-daily-news-summary/${yyyy}-${mm}-${dd}/business-standard`,
+  },
+  {
+    name: 'Vajiram & Ravi - Mains',
+    getUrl: ({ dd, mm, yyyy }) => `https://vajiramandravi.com/current-affairs/upsc-mains-current-affairs/${yyyy}/${mm}/${dd}/`,
+  },
+  {
+    name: 'Vajiram & Ravi - Prelims',
+    getUrl: ({ dd, mm, yyyy }) => `https://vajiramandravi.com/current-affairs/upsc-prelims-current-affairs/${yyyy}/${mm}/${dd}/`,
+  },
 ];
 
-async function fetchCASites(maxPerSite = 7, dateParts) {
+async function fetchCASites(maxPerSite = 15, dateParts) {
   const all = [];
 
   await Promise.allSettled(
@@ -194,6 +209,116 @@ async function fetchCASites(maxPerSite = 7, dateParts) {
     })
   );
 
+  return all;
+}
+
+// ─── Puppeteer: Vision IAS Subject Pages ─────────────────────────────────────
+
+// Subject IDs 1–15 on Vision IAS cover the full UPSC syllabus range
+const VISION_SUBJECT_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+const VISION_SUBJECT_URL = (id) =>
+  `https://visionias.in/current-affairs/search?subject=${id}&sort=recent&query=&type=articles&initiative=&time=any`;
+
+async function scrapeVisionSubjectPage(page, subjectId) {
+  const url = VISION_SUBJECT_URL(subjectId);
+  try {
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
+
+    // Wait for article cards to render
+    await page.waitForSelector('article, .article-card, .ca-card, [class*="article"], [class*="card"]', { timeout: 8000 }).catch(() => {});
+
+    const items = await page.evaluate((subjectId) => {
+      const results = [];
+
+      // Try multiple selector patterns Vision IAS might use
+      const cards = [
+        ...document.querySelectorAll('article'),
+        ...document.querySelectorAll('[class*="article-card"]'),
+        ...document.querySelectorAll('[class*="ca-card"]'),
+        ...document.querySelectorAll('[class*="ArticleCard"]'),
+        ...document.querySelectorAll('[class*="news-card"]'),
+      ];
+
+      // Deduplicate DOM nodes
+      const seen = new Set();
+      const unique = cards.filter((el) => {
+        if (seen.has(el)) return false;
+        seen.add(el);
+        return true;
+      });
+
+      for (const card of unique.slice(0, 8)) {
+        // Extract title — try heading tags first
+        const titleEl = card.querySelector('h1,h2,h3,h4,a[href*="current-affairs"]');
+        const title = titleEl?.innerText?.trim() || '';
+        if (!title || title.length < 10) continue;
+
+        // Extract summary from paragraph or description element
+        const summaryEl = card.querySelector('p, [class*="description"], [class*="summary"], [class*="excerpt"]');
+        const summary = summaryEl?.innerText?.trim()?.substring(0, 400) || '';
+
+        const linkEl = card.querySelector('a[href]');
+        const url = linkEl?.href || '';
+
+        results.push({
+          title,
+          summary,
+          url,
+          source: `Vision IAS - Subject ${subjectId}`,
+          pubDate: new Date().toISOString(),
+        });
+      }
+
+      return results;
+    }, subjectId);
+
+    console.log(`  ✓ Vision IAS subject ${subjectId}: ${items.length} articles`);
+    return items;
+  } catch (err) {
+    console.error(`  ✗ Vision IAS subject ${subjectId}:`, err.message);
+    return [];
+  }
+}
+
+async function fetchVisionSubjects() {
+  const all = [];
+  let browser;
+
+  try {
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    });
+
+    // Run subjects in batches of 5 concurrently
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < VISION_SUBJECT_IDS.length; i += BATCH_SIZE) {
+      const batch = VISION_SUBJECT_IDS.slice(i, i + BATCH_SIZE);
+      console.log(`[Puppeteer] Vision IAS subjects batch: ${batch.join(', ')}`);
+
+      const batchResults = await Promise.allSettled(
+        batch.map(async (id) => {
+          const page = await browser.newPage();
+          await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+          try {
+            return await scrapeVisionSubjectPage(page, id);
+          } finally {
+            await page.close().catch(() => {});
+          }
+        })
+      );
+
+      for (const result of batchResults) {
+        if (result.status === 'fulfilled') all.push(...result.value);
+      }
+    }
+  } catch (err) {
+    console.error('[Puppeteer] Browser error:', err.message);
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
+
+  console.log(`[Puppeteer] Vision IAS subjects total: ${all.length} articles`);
   return all;
 }
 
@@ -216,36 +341,44 @@ function deduplicateByTitle(items) {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Fetch from all sources. Interleaves CA sections with RSS so the
- * compressNews selector (which takes top 8) always sees CA content.
+ * Fetch from all sources — RSS, plain-HTTP CA sites, and Puppeteer Vision IAS subjects.
+ * Returns up to `limit` deduplicated items.
  *
- * Order: CA1, CA2, RSS1, CA3, CA4, RSS2, CA5, CA6, RSS3 …
+ * Interleave order: CA → Subject → RSS so AI always gets editorial-heavy content first.
  */
-export async function fetchNews(limit = 20, targetDate) {
+export async function fetchNews(limit = 80, targetDate) {
   const dateParts = getDateParts(targetDate);
   console.log(`[fetchNews] Target date: ${dateParts.yyyy}-${dateParts.mm}-${dateParts.dd}`);
-  const [rssResult, caResult] = await Promise.allSettled([fetchRSS(), fetchCASites(7, dateParts)]);
+
+  const [rssResult, caResult, subjectResult] = await Promise.allSettled([
+    fetchRSS(),
+    fetchCASites(15, dateParts),
+    fetchVisionSubjects(),
+  ]);
 
   const rss = rssResult.status === 'fulfilled' ? rssResult.value : [];
   const ca = caResult.status === 'fulfilled' ? caResult.value : [];
+  const subjects = subjectResult.status === 'fulfilled' ? subjectResult.value : [];
 
-  // Interleave 2 CA items per 1 RSS item so CA is always represented
+  // Interleave: 3 CA → 2 Subject → 1 RSS per round
   const interleaved = [];
-  const rssQ = [...rss];
   const caQ = [...ca];
-  while (rssQ.length || caQ.length) {
-    if (caQ.length) interleaved.push(caQ.shift());
-    if (caQ.length) interleaved.push(caQ.shift());
+  const subQ = [...subjects];
+  const rssQ = [...rss];
+
+  while (caQ.length || subQ.length || rssQ.length) {
+    for (let i = 0; i < 3 && caQ.length; i++) interleaved.push(caQ.shift());
+    for (let i = 0; i < 2 && subQ.length; i++) interleaved.push(subQ.shift());
     if (rssQ.length) interleaved.push(rssQ.shift());
   }
 
   const merged = deduplicateByTitle(interleaved);
-  console.log(`✓ Sources: RSS ${rss.length}, CA ${ca.length} → merged ${merged.length}`);
+  console.log(`✓ Sources: RSS ${rss.length}, CA ${ca.length}, Subjects ${subjects.length} → merged ${merged.length}`);
   return merged.slice(0, limit);
 }
 
-export async function fetchNewsByKeywords(keywords = [], limit = 15, targetDate) {
-  const all = await fetchNews(50, targetDate);
+export async function fetchNewsByKeywords(keywords = [], limit = 40, targetDate) {
+  const all = await fetchNews(80, targetDate);
   if (!keywords.length) return all.slice(0, limit);
   const filtered = all.filter((item) => {
     const text = (item.title + ' ' + item.summary).toLowerCase();

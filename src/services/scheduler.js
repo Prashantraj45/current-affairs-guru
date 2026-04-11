@@ -73,7 +73,7 @@ export async function runDailyJob(targetDate) {
 
     // Step 1: Fetch news for target date
     console.log(`\n[STEP 1] Fetching news for ${jobDate}...`);
-    const newsBatch = await fetchNews(15, jobDate);
+    const newsBatch = await fetchNews(80, jobDate);
     console.log(`✓ Fetched ${newsBatch.length} news items`);
 
     if (newsBatch.length === 0) {
