@@ -1,18 +1,54 @@
 import { useRouter } from 'next/router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Chrome, Loader2 } from 'lucide-react';
-import { oauthDisabled, signInWithGoogle } from '../../lib/firebase';
+import {
+  completeGoogleRedirectSignIn,
+  oauthDisabled,
+  signInWithGoogle,
+} from '../../lib/firebase';
 
 export default function GoogleSignIn() {
   const router = useRouter();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateRedirectAuth() {
+      if (oauthDisabled) return;
+
+      setLoading(true);
+
+      try {
+        const result = await completeGoogleRedirectSignIn();
+        if (!cancelled && result?.user) {
+          router.replace('/');
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e?.message || 'Could not complete Google sign in.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    hydrateRedirectAuth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
   const onSignIn = async () => {
     setLoading(true);
     setError('');
     try {
-      await signInWithGoogle();
+      const { redirected } = await signInWithGoogle();
+      if (redirected) return;
       router.replace('/');
     } catch (e) {
       setError(e?.message || 'Could not sign in.');
