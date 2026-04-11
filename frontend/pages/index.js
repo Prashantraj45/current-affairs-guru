@@ -59,11 +59,19 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {topics.slice(3).length ? (
+      {(topics[3] || topics[4] || topics[5]) ? (
+        <section className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {topics[3] ? <TopicCard topic={topics[3]} date={payload?.date} variant="compact" /> : null}
+          {topics[4] ? <TopicCard topic={topics[4]} date={payload?.date} variant="compact" /> : null}
+          {topics[5] ? <TopicCard topic={topics[5]} date={payload?.date} variant="compact" /> : null}
+        </section>
+      ) : null}
+
+      {topics.slice(6).length ? (
         <section className="mt-10">
           <SectionTitle title="More Topics" />
           <StaggerContainer className="space-y-2">
-            {topics.slice(3).map((topic) => (
+            {topics.slice(6).map((topic) => (
               <TopicRow key={topic.id} topic={topic} date={payload?.date} />
             ))}
           </StaggerContainer>
