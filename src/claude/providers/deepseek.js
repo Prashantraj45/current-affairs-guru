@@ -65,7 +65,7 @@ export async function callBatchTopics(newsBatch) {
       { role: 'system', content: TOPIC_SYSTEM },
       { role: 'user', content: userPrompt },
     ],
-    max_tokens: 4000,
+    max_tokens: 8000,
   });
 
   const raw = response.choices?.[0]?.message?.content || '';
@@ -122,7 +122,7 @@ export async function callCaseStudies(topics) {
       { role: 'system', content: CASE_STUDY_SYSTEM },
       { role: 'user', content: userPrompt },
     ],
-    max_tokens: 5000,
+    max_tokens: 8000,
   });
 
   const raw = response.choices?.[0]?.message?.content || '';
@@ -160,7 +160,7 @@ export async function callInsights(topics) {
       { role: 'system', content: INSIGHTS_SYSTEM },
       { role: 'user', content: userPrompt },
     ],
-    max_tokens: 1500,
+    max_tokens: 2500,
   });
 
   const raw = response.choices?.[0]?.message?.content || '';
@@ -196,7 +196,7 @@ export async function callMCQs(topics) {
       { role: 'system', content: MCQ_SYSTEM },
       { role: 'user', content: userPrompt },
     ],
-    max_tokens: 3000,
+    max_tokens: 6000,
   });
 
   const raw = response.choices?.[0]?.message?.content || '';
