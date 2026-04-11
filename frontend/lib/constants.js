@@ -2,6 +2,8 @@ export const NAV_LINKS = [
   { href: '/', label: 'Daily Brief' },
   { href: '/history', label: 'Chronicle' },
   { href: '/intel-canvas', label: 'Signal Deck' },
+  { href: '/donate', label: 'Donate' },
+  { href: '/support', label: 'Support' },
 ];
 
 export const CATEGORY_COLORS = {
