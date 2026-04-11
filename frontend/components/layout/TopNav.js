@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { Atom, LogOut, Moon, Sun } from 'lucide-react';
 import { auth, oauthDisabled, signOutUser } from '../../lib/firebase';
@@ -39,6 +39,8 @@ function ThemeSlider() {
 
 function UserMenu({ user, localMode = false }) {
   const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
   const initials = useMemo(() => {
     const source = user?.displayName || user?.email || 'U';
     return source
@@ -49,29 +51,48 @@ function UserMenu({ user, localMode = false }) {
       .toUpperCase();
   }, [user]);
 
+  const displayName = useMemo(() => {
+    const name = user?.displayName || user?.email || '';
+    return name.length > 12 ? name.slice(0, 12) + '…' : name;
+  }, [user]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
   return (
-    <div className="relative">
+    <div className="relative" ref={menuRef}>
       <button
         type="button"
         onClick={() => (localMode ? null : setOpen((prev) => !prev))}
-        className="tap-target flex items-center gap-2 rounded-full border border-outline-variant bg-surface-mid px-1.5 py-1"
+        className="tap-target flex items-center gap-2 rounded-full border border-outline-variant bg-surface-mid px-3 py-1"
       >
         {user?.photoURL ? (
           <Image
             src={user.photoURL}
             alt="User avatar"
-            width={32}
-            height={32}
-            className="h-8 w-8 rounded-full object-cover"
+            width={28}
+            height={28}
+            className="h-7 w-7 rounded-full object-cover"
           />
         ) : (
           <span
-            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${
+            className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
               localMode ? 'bg-secondary/25 text-secondary' : 'bg-primary text-on-primary'
             }`}
           >
             {initials}
           </span>
+        )}
+        {!localMode && (
+          <span className="hidden text-sm text-on-surface sm:block">{displayName}</span>
         )}
       </button>
 
