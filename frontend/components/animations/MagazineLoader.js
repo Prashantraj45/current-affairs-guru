@@ -12,9 +12,9 @@ export default function MagazineLoader() {
     const alreadyShown = window.sessionStorage.getItem(LOADER_KEY);
     if (alreadyShown) return;
 
+    window.sessionStorage.setItem(LOADER_KEY, 'true');
     setVisible(true);
     const timer = window.setTimeout(() => {
-      window.sessionStorage.setItem(LOADER_KEY, 'true');
       setVisible(false);
     }, 3500);
     return () => window.clearTimeout(timer);

@@ -5,7 +5,6 @@ import PageHeader from '../components/layout/PageHeader';
 import SectionTitle from '../components/layout/SectionTitle';
 import TopicCard from '../components/ui/TopicCard';
 import TopicRow from '../components/ui/TopicRow';
-import MagazineLoader from '../components/animations/MagazineLoader';
 import ScrollReveal from '../components/animations/ScrollReveal';
 import StaggerContainer from '../components/animations/StaggerContainer';
 
@@ -52,7 +51,6 @@ export default function DashboardPage() {
 
   return (
     <>
-      <MagazineLoader />
       <PageHeader
         label="GS Intelligence Engine"
         title="Today's Brief"
