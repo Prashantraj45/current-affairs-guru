@@ -16,6 +16,7 @@ import {
   saveEntry,
 } from '../db/db.js';
 import { getJobStatus as getSchedulerStatus, runDailyJob, startScheduler as initScheduler, stopScheduler as stopJob } from '../services/scheduler.js';
+import { releaseLock } from '../models/Lock.js';
 import { callCaseStudies } from '../claude/providers/deepseek.js';
 config({ override: true });
 
@@ -367,6 +368,19 @@ app.post('/api/admin/stop', verifyAdminKey, async (req, res) => {
   } catch (error) {
     console.error('Error stopping scheduler:', error.message);
     res.status(500).json({ error: 'Failed to stop scheduler' });
+  }
+});
+
+/**
+ * Admin: Force-release a stuck job lock (use when server was restarted mid-job)
+ */
+app.post('/api/admin/release-lock', verifyAdminKey, async (req, res) => {
+  try {
+    await releaseLock('daily_intelligence', false, 'Manually released via admin API');
+    console.log('🔓 Lock force-released by admin at', new Date().toISOString());
+    res.json({ status: 'released', timestamp: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
