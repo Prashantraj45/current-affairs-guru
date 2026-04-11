@@ -134,7 +134,7 @@ export async function getHistoryEntries({ start, end } = {}) {
     }
     return await Entry.find(
       filter,
-      { date: 1, 'topics.id': 1, 'topics.title': 1, 'topics.category': 1, 'topics.importance': 1 }
+      { date: 1, 'topics.id': 1, 'topics.title': 1, 'topics.category': 1, 'topics.importance': 1, 'topics.score': 1, 'topics.summary': 1 }
     ).sort({ date: -1 });
   } catch (error) {
     console.error('Error getting history entries:', error);

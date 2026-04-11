@@ -23,6 +23,7 @@ export default function HistoryPage() {
   const [rangeEntries, setRangeEntries] = useState([]);
   const [rangeLoading, setRangeLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [sortBy, setSortBy] = useState('default'); // 'default' | 'score-desc' | 'score-asc'
 
   // Load full history index (lightweight)
   useEffect(() => {
@@ -258,6 +259,15 @@ export default function HistoryPage() {
                 {rangeLoading ? 'Loading...' : `${rangeEntries.length} day(s) selected`}
               </p>
             </div>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="rounded-xl border border-outline-variant bg-surface-mid px-3 py-2 text-sm text-on-surface focus:border-primary/60 focus:outline-none"
+            >
+              <option value="default">Default order</option>
+              <option value="score-desc">Score: High → Low</option>
+              <option value="score-asc">Score: Low → High</option>
+            </select>
           </div>
 
           {rangeLoading ? (
@@ -278,7 +288,11 @@ export default function HistoryPage() {
                       </span>
                     </div>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {(entry.topics || []).map((topic) => (
+                      {[...(entry.topics || [])].sort((a, b) => {
+                        if (sortBy === 'score-desc') return (b.score || 0) - (a.score || 0);
+                        if (sortBy === 'score-asc') return (a.score || 0) - (b.score || 0);
+                        return 0;
+                      }).map((topic) => (
                         <TopicCard
                           key={topic.id}
                           topic={topic}
