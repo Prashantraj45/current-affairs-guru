@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 const ThemeContext = createContext({
-  theme: 'dark',
+  theme: 'light',
   toggleTheme: () => {},
 });
 
@@ -10,7 +10,7 @@ const getInitialTheme = () => {
   const stored = window.localStorage.getItem('theme');
   if (stored === 'dark' || stored === 'light') return stored;
   // Fallback to system preference only when no stored value
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return 'light';
 };
 
 export function ThemeProvider({ children }) {
