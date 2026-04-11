@@ -40,7 +40,7 @@ export function stopScheduler() {
  * Run the daily intelligence job for a specific date.
  * @param {string} [targetDate] YYYY-MM-DD — defaults to yesterday UTC
  */
-export async function runDailyJob(targetDate) {
+export async function runDailyJob(targetDate, { force = false } = {}) {
   // Default: yesterday UTC (CA sites publish previous day's content)
   const jobDate = targetDate || new Date(Date.now() - 86400000).toISOString().split('T')[0];
   let lockAcquired = false;
@@ -59,10 +59,13 @@ export async function runDailyJob(targetDate) {
 
     console.log('\n[CHECK] Verifying today\'s data doesn\'t already exist...');
     const exists = await entryExists(jobDate);
-    if (exists) {
+    if (exists && !force) {
       console.log(`ℹ️  Today's data (${jobDate}) already processed, skipping execution`);
       await releaseLock(JOB_NAME, true);
       return;
+    }
+    if (exists && force) {
+      console.log(`⚠️  Force mode: overwriting existing entry for ${jobDate}`);
     }
 
     console.log('\n========================================');

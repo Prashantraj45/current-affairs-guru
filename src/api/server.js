@@ -375,7 +375,7 @@ app.post('/api/admin/stop', verifyAdminKey, async (req, res) => {
  * Body: { "date": "YYYY-MM-DD" }  (optional)
  */
 app.post('/api/admin/run', verifyAdminKey, async (req, res) => {
-  const { date } = req.body || {};
+  const { date, force = false } = req.body || {};
 
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
@@ -387,10 +387,10 @@ app.post('/api/admin/run', verifyAdminKey, async (req, res) => {
   }
 
   const targetDate = date || new Date(Date.now() - 86400000).toISOString().split('T')[0];
-  console.log(`▶ Manual job triggered for ${targetDate} at ${new Date().toISOString()}`);
+  console.log(`▶ Manual job triggered for ${targetDate} (force=${force}) at ${new Date().toISOString()}`);
 
   // Fire and forget — job is long-running
-  runDailyJob(targetDate).catch((err) => console.error('Manual job error:', err.message));
+  runDailyJob(targetDate, { force }).catch((err) => console.error('Manual job error:', err.message));
 
   res.json({
     status: 'started',

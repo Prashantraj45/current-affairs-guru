@@ -277,13 +277,13 @@ export default function HistoryPage() {
                         {entry.topicCount} topics
                       </span>
                     </div>
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                      {(entry.topics || []).map((topic, i) => (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {(entry.topics || []).map((topic) => (
                         <TopicCard
                           key={topic.id}
                           topic={topic}
                           date={entry.date}
-                          variant={i === 0 ? 'hero' : 'compact'}
+                          variant="compact"
                         />
                       ))}
                     </div>
