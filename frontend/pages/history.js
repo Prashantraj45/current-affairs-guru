@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import api from '../lib/api';
+import { getCache, setCache } from '../lib/cache';
 import PageHeader from '../components/layout/PageHeader';
 import ScrollReveal from '../components/animations/ScrollReveal';
 import StaggerContainer from '../components/animations/StaggerContainer';
@@ -30,10 +31,12 @@ export default function HistoryPage() {
     let active = true;
     async function load() {
       try {
-        const response = await api.get('/api/history');
+        const today = new Date().toISOString().slice(0, 10);
+        const cached = getCache(`history_index_${today}`);
+        const data = cached || (await api.get('/api/history').then(r => { setCache(`history_index_${today}`, r.data); return r.data; }));
         if (!active) return;
-        setAllEntries(response.data.entries || []);
-        const newest = response.data.entries?.[0];
+        setAllEntries(data.entries || []);
+        const newest = data.entries?.[0];
         setActiveMonth(newest ? newest.date.slice(0, 7) : '');
         if (newest) setRangeStart(newest.date);
       } catch {

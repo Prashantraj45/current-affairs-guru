@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../lib/api';
+import { getCache, setCache } from '../lib/cache';
 import PageHeader from '../components/layout/PageHeader';
 import SectionTitle from '../components/layout/SectionTitle';
 import TopicCard from '../components/ui/TopicCard';
@@ -17,7 +18,14 @@ export default function DashboardPage() {
     let active = true;
     async function load() {
       try {
+        const today = new Date().toISOString().slice(0, 10);
+        const cached = getCache(`today_${today}`);
+        if (cached) {
+          if (active) { setPayload(cached); setLoading(false); }
+          return;
+        }
         const response = await api.get('/api/today');
+        setCache(`today_${today}`, response.data);
         if (active) setPayload(response.data);
       } catch (e) {
         if (active) setError(e?.response?.data?.error || e?.message || 'Could not load dashboard.');
