@@ -104,7 +104,7 @@ export async function processNewsBatch(newsBatch, previousREADME = null) {
     return null;
   }
 
-  const batches = splitIntoBatches(newsBatch, 8);
+  const batches = splitIntoBatches(newsBatch, 12);
   console.log(`[AI] Pass 1 — ${batches.length} topic batches × deepseek-chat (parallel)`);
 
   // ── Pass 1: Topic extraction (all batches in parallel) ──────────────────────

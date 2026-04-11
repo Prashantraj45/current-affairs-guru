@@ -12,9 +12,11 @@ import {
   getMonthlyInsights,
   listMonthlyInsights,
   readREADME,
-  refreshMonthlyInsights
+  refreshMonthlyInsights,
+  saveEntry,
 } from '../db/db.js';
 import { getJobStatus as getSchedulerStatus, runDailyJob, startScheduler as initScheduler, stopScheduler as stopJob } from '../services/scheduler.js';
+import { callCaseStudies } from '../claude/providers/deepseek.js';
 config({ override: true });
 
 const app = express();
@@ -396,6 +398,36 @@ app.post('/api/admin/run', verifyAdminKey, async (req, res) => {
     message: `Job started for ${targetDate}. Poll /api/admin/status for progress.`,
     timestamp: new Date().toISOString(),
   });
+});
+
+/**
+ * Admin: Patch case studies for an existing entry (without re-running the full job)
+ * Body: { "date": "YYYY-MM-DD" }
+ */
+app.post('/api/admin/patch-case-studies', verifyAdminKey, async (req, res) => {
+  const { date } = req.body || {};
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'Valid date required. Use YYYY-MM-DD' });
+  }
+
+  const entry = await getEntry(date);
+  if (!entry) return res.status(404).json({ error: `No entry found for ${date}` });
+
+  const topics = entry.topics || [];
+  if (topics.length < 2) {
+    return res.status(422).json({ error: `Entry for ${date} has too few topics (${topics.length}) to generate case studies` });
+  }
+
+  console.log(`[patch-case-studies] Generating case studies for ${date} (${topics.length} topics)`);
+
+  try {
+    const caseStudies = await callCaseStudies(topics);
+    await saveEntry({ ...entry.toObject(), caseStudies }, date);
+    res.json({ status: 'ok', date, caseStudiesGenerated: caseStudies.length });
+  } catch (err) {
+    console.error('[patch-case-studies] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // 404 handler

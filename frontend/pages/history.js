@@ -5,7 +5,7 @@ import api from '../lib/api';
 import PageHeader from '../components/layout/PageHeader';
 import ScrollReveal from '../components/animations/ScrollReveal';
 import StaggerContainer from '../components/animations/StaggerContainer';
-import TopicRow from '../components/ui/TopicRow';
+import TopicCard from '../components/ui/TopicCard';
 import CalendarDay from '../components/ui/CalendarDay';
 
 const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -267,22 +267,27 @@ export default function HistoryPage() {
               Select a date or range on the calendar
             </div>
           ) : (
-            <StaggerContainer className="space-y-4">
+            <StaggerContainer className="space-y-8">
               {rangeEntries.map((entry) => (
                 <ScrollReveal key={entry.date}>
-                  <article className="glass-panel rounded-[26px] border p-5 md:p-6">
-                    <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <div className="mb-3 flex items-center gap-3">
                       <h3 className="font-headline text-2xl text-on-surface">{entry.date}</h3>
                       <span className="rounded-full border border-outline-variant px-3 py-1 text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
                         {entry.topicCount} topics
                       </span>
                     </div>
-                    <div className="space-y-2">
-                      {(entry.topics || []).map((topic) => (
-                        <TopicRow key={topic.id} topic={topic} date={entry.date} />
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                      {(entry.topics || []).map((topic, i) => (
+                        <TopicCard
+                          key={topic.id}
+                          topic={topic}
+                          date={entry.date}
+                          variant={i === 0 ? 'hero' : 'compact'}
+                        />
                       ))}
                     </div>
-                  </article>
+                  </div>
                 </ScrollReveal>
               ))}
             </StaggerContainer>
