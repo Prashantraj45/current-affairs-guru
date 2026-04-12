@@ -18,12 +18,14 @@ export function startScheduler() {
   const jobTime = process.env.JOB_TIME || '05:00';
   const [hour, minute] = jobTime.split(':');
 
-  console.log(`📅 Scheduler starting - Job scheduled for ${jobTime} daily (UTC)`);
+  console.log(`📅 Scheduler starting - Job scheduled for ${jobTime} UTC daily`);
+  console.log(`📅 Cron expression: ${minute} ${hour} * * * (timezone: UTC)`);
 
-  // Schedule job at specified time daily
+  // Schedule job at specified time daily — timezone: UTC explicit to avoid OS timezone drift
   scheduledJob = cron.schedule(`${minute} ${hour} * * *`, async () => {
+    console.log(`⏰ Cron fired at ${new Date().toISOString()}`);
     await runDailyJob();
-  });
+  }, { timezone: 'UTC' });
 
   console.log('✓ Scheduler ready');
 }

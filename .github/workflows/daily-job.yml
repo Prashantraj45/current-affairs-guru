@@ -1,0 +1,51 @@
+name: Daily Intelligence Job
+
+on:
+  schedule:
+    # 11:30 PM UTC = 5:00 AM IST daily
+    - cron: '30 23 * * *'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Target date (YYYY-MM-DD). Leave blank for yesterday UTC.'
+        required: false
+      force:
+        description: 'Force overwrite existing entry'
+        required: false
+        default: 'false'
+
+jobs:
+  trigger-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger daily intelligence job
+        run: |
+          DATE_PARAM="${{ github.event.inputs.date }}"
+          FORCE_PARAM="${{ github.event.inputs.force || 'false' }}"
+
+          BODY="{\"force\": $FORCE_PARAM}"
+          if [ -n "$DATE_PARAM" ]; then
+            BODY="{\"date\": \"$DATE_PARAM\", \"force\": $FORCE_PARAM}"
+          fi
+
+          echo "Triggering job with body: $BODY"
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST "${{ secrets.RENDER_API_URL }}/api/admin/run" \
+            -H "Content-Type: application/json" \
+            -H "x-admin-key: ${{ secrets.ADMIN_SECRET }}" \
+            -d "$BODY" \
+            --max-time 30)
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY_OUT=$(echo "$RESPONSE" | head -1)
+
+          echo "HTTP status: $HTTP_CODE"
+          echo "Response: $BODY_OUT"
+
+          if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 202 ]; then
+            echo "Job trigger failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+          echo "Job triggered successfully"
