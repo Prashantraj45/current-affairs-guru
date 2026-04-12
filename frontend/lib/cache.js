@@ -1,11 +1,5 @@
 const PREFIX = 'cag_';
-
-function msUntilMidnight() {
-  const now = new Date();
-  const midnight = new Date(now);
-  midnight.setHours(24, 0, 0, 0);
-  return midnight - now;
-}
+const ONE_HOUR_MS = 60 * 60 * 1000;
 
 export function getCache(key) {
   if (typeof window === 'undefined') return null;
@@ -23,7 +17,7 @@ export function getCache(key) {
   }
 }
 
-export function setCache(key, data, ttlMs = msUntilMidnight()) {
+export function setCache(key, data, ttlMs = ONE_HOUR_MS) {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(PREFIX + key, JSON.stringify({ data, expires: Date.now() + ttlMs }));

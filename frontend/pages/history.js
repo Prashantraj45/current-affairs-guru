@@ -30,17 +30,39 @@ export default function HistoryPage() {
   useEffect(() => {
     let active = true;
     async function load() {
+      const today = new Date().toISOString().slice(0, 10);
+      const cacheKey = `history_index_${today}`;
+      const cached = getCache(cacheKey);
+
+      // Show cached data immediately (stale-while-revalidate)
+      if (cached) {
+        if (active) {
+          setAllEntries(cached.entries || []);
+          const newest = cached.entries?.[0];
+          setActiveMonth(newest ? newest.date.slice(0, 7) : '');
+          setRangeStart(newest?.date || null);
+          setLoading(false);
+        }
+      }
+
+      // Always fetch fresh — update if API returns more entries
       try {
-        const today = new Date().toISOString().slice(0, 10);
-        const cached = getCache(`history_index_${today}`);
-        const data = cached || (await api.get('/api/history').then(r => { setCache(`history_index_${today}`, r.data); return r.data; }));
-        if (!active) return;
-        setAllEntries(data.entries || []);
-        const newest = data.entries?.[0];
-        setActiveMonth(newest ? newest.date.slice(0, 7) : '');
-        if (newest) setRangeStart(newest.date);
+        const r = await api.get('/api/history');
+        const fresh = r.data;
+        if (active) {
+          const freshCount = fresh.entries?.length || 0;
+          const cachedCount = cached?.entries?.length || 0;
+          if (!cached || freshCount !== cachedCount) {
+            setCache(cacheKey, fresh);
+            setAllEntries(fresh.entries || []);
+            const newest = fresh.entries?.[0];
+            setActiveMonth(newest ? newest.date.slice(0, 7) : '');
+            // Only reset rangeStart if not yet set (avoid clobbering user selection)
+            setRangeStart(prev => prev || newest?.date || null);
+          }
+        }
       } catch {
-        if (active) setAllEntries([]);
+        if (active && !cached) setAllEntries([]);
       } finally {
         if (active) setLoading(false);
       }

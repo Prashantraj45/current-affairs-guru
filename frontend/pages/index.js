@@ -54,6 +54,14 @@ export default function DashboardPage() {
   const topics = useMemo(() => payload?.topics || [], [payload?.topics]);
   const tagCloud = useMemo(() => [...new Set(topics.flatMap((topic) => topic.tags || []))], [topics]);
 
+  // Fill the compact card grid with complete rows of 3, leaving the rest for "More Topics"
+  const cardCutoff = useMemo(() => {
+    const remaining = topics.length - 3;
+    if (remaining <= 0) return 3;
+    const rows = Math.min(Math.ceil(remaining / 3), 4); // up to 4 rows (12 cards) in card grid
+    return 3 + rows * 3;
+  }, [topics.length]);
+
   if (loading) {
     return <div className="py-16 text-center text-sm text-on-surface-variant">Loading daily intelligence...</div>;
   }
@@ -78,19 +86,19 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {(topics[3] || topics[4] || topics[5]) ? (
+      {topics.slice(3, cardCutoff).length ? (
         <section className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {topics[3] ? <TopicCard topic={topics[3]} date={payload?.date} variant="compact" /> : null}
-          {topics[4] ? <TopicCard topic={topics[4]} date={payload?.date} variant="compact" /> : null}
-          {topics[5] ? <TopicCard topic={topics[5]} date={payload?.date} variant="compact" /> : null}
+          {topics.slice(3, cardCutoff).map((topic) => (
+            <TopicCard key={topic.id} topic={topic} date={payload?.date} variant="compact" />
+          ))}
         </section>
       ) : null}
 
-      {topics.slice(6).length ? (
+      {topics.slice(cardCutoff).length ? (
         <section className="mt-10">
           <SectionTitle title="More Topics" />
           <StaggerContainer className="space-y-2">
-            {topics.slice(6).map((topic) => (
+            {topics.slice(cardCutoff).map((topic) => (
               <TopicRow key={topic.id} topic={topic} date={payload?.date} />
             ))}
           </StaggerContainer>
