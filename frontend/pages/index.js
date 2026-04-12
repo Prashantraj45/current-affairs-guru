@@ -16,18 +16,31 @@ export default function DashboardPage() {
   useEffect(() => {
     let active = true;
     async function load() {
+      const today = new Date().toISOString().slice(0, 10);
+      const cacheKey = `today_${today}`;
+      const cached = getCache(cacheKey);
+
+      // Show cached data immediately (stale-while-revalidate)
+      if (cached) {
+        if (active) { setPayload(cached); setLoading(false); }
+      }
+
+      // Always fetch fresh — update if API has newer date than cache
       try {
-        const today = new Date().toISOString().slice(0, 10);
-        const cached = getCache(`today_${today}`);
-        if (cached) {
-          if (active) { setPayload(cached); setLoading(false); }
-          return;
-        }
         const response = await api.get('/api/today');
-        setCache(`today_${today}`, response.data);
-        if (active) setPayload(response.data);
+        const fresh = response.data;
+        if (active) {
+          // Replace if no cache, or if fresh data is for a newer date
+          if (!cached || fresh.date > (cached.date || '')) {
+            setCache(cacheKey, fresh);
+            setPayload(fresh);
+          }
+        }
       } catch (e) {
-        if (active) setError(e?.response?.data?.error || e?.message || 'Could not load dashboard.');
+        // Only show error if we have nothing to display
+        if (active && !cached) {
+          setError(e?.response?.data?.error || e?.message || 'Could not load dashboard.');
+        }
       } finally {
         if (active) setLoading(false);
       }
