@@ -62,7 +62,7 @@ const apiLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Stricter on auth endpoints
+  max: 10, // Stricter on auth endpoints
   message: 'Too many authentication attempts, please try again later',
   skipSuccessfulRequests: false
 });
