@@ -16,7 +16,7 @@ import {
   saveEntry,
 } from '../db/db.js';
 import { getJobStatus as getSchedulerStatus, runDailyJob, startScheduler as initScheduler, stopScheduler as stopJob } from '../services/scheduler.js';
-import { releaseLock } from '../models/Lock.js';
+import { releaseLock, forceUnlock } from '../models/Lock.js';
 import { callCaseStudies } from '../claude/providers/deepseek.js';
 config({ override: true });
 
@@ -376,8 +376,8 @@ app.post('/api/admin/stop', verifyAdminKey, async (req, res) => {
  */
 app.post('/api/admin/release-lock', verifyAdminKey, async (req, res) => {
   try {
-    await releaseLock('daily_intelligence', false, 'Manually released via admin API');
-    console.log('🔓 Lock force-released by admin at', new Date().toISOString());
+    await forceUnlock('daily_intelligence');
+    console.log('🔓 Lock force-unlocked by admin at', new Date().toISOString());
     res.json({ status: 'released', timestamp: new Date().toISOString() });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -395,21 +395,30 @@ app.post('/api/admin/run', verifyAdminKey, async (req, res) => {
     return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
   }
 
-  const status = await getSchedulerStatus();
-  if (status.running) {
-    return res.status(409).json({ error: 'Job already running', lock: status.lock });
+  if (force) {
+    // Force mode: clear any stuck lock before running
+    await forceUnlock('daily_intelligence').catch((e) => console.warn('forceUnlock warn:', e.message));
+  } else {
+    const status = await getSchedulerStatus();
+    if (status.running) {
+      return res.status(409).json({ error: 'Job already running', lock: status.lock });
+    }
   }
 
-  const targetDate = date || new Date(Date.now() - 86400000).toISOString().split('T')[0];
-  console.log(`▶ Manual job triggered for ${targetDate} (force=${force}) at ${new Date().toISOString()}`);
+  // Date must always be explicit — caller owns the date, no silent defaults here
+  if (!date) {
+    return res.status(400).json({ error: 'date is required (YYYY-MM-DD). Pass the date you want to fetch data for.' });
+  }
+
+  console.log(`▶ Manual job triggered for ${date} (force=${force}) at ${new Date().toISOString()}`);
 
   // Fire and forget — job is long-running
-  runDailyJob(targetDate, { force }).catch((err) => console.error('Manual job error:', err.message));
+  runDailyJob(date, { force }).catch((err) => console.error('Manual job error:', err.message));
 
   res.json({
     status: 'started',
-    targetDate,
-    message: `Job started for ${targetDate}. Poll /api/admin/status for progress.`,
+    targetDate: date,
+    message: `Job started for ${date}. Poll /api/admin/status for progress.`,
     timestamp: new Date().toISOString(),
   });
 });
