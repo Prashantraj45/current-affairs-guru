@@ -68,3 +68,4 @@ frontend/.env.local
 *token*
 *secret*
 !config/secrets.js
+.cache/

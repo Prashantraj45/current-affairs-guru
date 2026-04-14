@@ -1,7 +1,7 @@
-import https from 'https';
 import http from 'http';
-import Parser from 'rss-parser';
+import https from 'https';
 import puppeteer from 'puppeteer';
+import Parser from 'rss-parser';
 
 const parser = new Parser({
   timeout: 10000,
@@ -285,8 +285,13 @@ async function fetchVisionSubjects() {
   let browser;
 
   try {
+    // executablePath: resolve against the same cache dir puppeteer.config.cjs uses,
+    // so Render finds Chrome inside the project directory at runtime.
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath();
+    console.log(`[Puppeteer] Using Chrome at: ${executablePath}`);
     browser = await puppeteer.launch({
       headless: true,
+      executablePath,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
 

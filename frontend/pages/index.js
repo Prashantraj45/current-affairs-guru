@@ -5,6 +5,7 @@ import PageHeader from '../components/layout/PageHeader';
 import SectionTitle from '../components/layout/SectionTitle';
 import TopicCard from '../components/ui/TopicCard';
 import TopicRow from '../components/ui/TopicRow';
+import CaseStudyCard from '../components/ui/CaseStudyCard';
 import ScrollReveal from '../components/animations/ScrollReveal';
 import StaggerContainer from '../components/animations/StaggerContainer';
 
@@ -52,6 +53,7 @@ export default function DashboardPage() {
   }, []);
 
   const topics = useMemo(() => payload?.topics || [], [payload?.topics]);
+  const caseStudies = useMemo(() => payload?.caseStudies || [], [payload?.caseStudies]);
   const tagCloud = useMemo(() => [...new Set(topics.flatMap((topic) => topic.tags || []))], [topics]);
 
   // Fill the compact card grid with complete rows of 3, leaving the rest for "More Topics"
@@ -103,6 +105,17 @@ export default function DashboardPage() {
             ))}
           </StaggerContainer>
         </section>
+      ) : null}
+
+      {caseStudies.length ? (
+        <ScrollReveal className="mt-10">
+          <SectionTitle title="Case Studies" note={`${caseStudies.length} deep dives`} />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {caseStudies.map((cs, i) => (
+              <CaseStudyCard key={i} caseStudy={cs} />
+            ))}
+          </div>
+        </ScrollReveal>
       ) : null}
 
       {tagCloud.length ? (

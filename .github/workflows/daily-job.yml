@@ -24,9 +24,9 @@ jobs:
           if [ -n "${{ github.event.inputs.date }}" ]; then
             TARGET_DATE="${{ github.event.inputs.date }}"
           else
-            # At 11:30 PM UTC, "today" in IST is already the next calendar day.
-            # We want data for the IST day that just ended = UTC today's date.
-            TARGET_DATE=$(date -u +%Y-%m-%d)
+            # Job runs at ~5 AM IST (day 2). We want data for day 1 = yesterday IST.
+            # Resolve in IST so the date is correct regardless of UTC boundary.
+            TARGET_DATE=$(TZ=Asia/Kolkata date -d "yesterday" +%Y-%m-%d)
           fi
           echo "TARGET_DATE=$TARGET_DATE" >> $GITHUB_OUTPUT
           echo "Resolved target date: $TARGET_DATE"
