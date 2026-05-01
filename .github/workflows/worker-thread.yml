@@ -2,7 +2,7 @@ name: Keep Render Alive
 
 on:
   schedule:
-    - cron: "*/3 * * * *"
+    - cron: "*/12 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -14,7 +14,7 @@ jobs:
           echo "Pinging Render health endpoint..."
 
           RESPONSE=$(curl -s -w "\n%{http_code}" \
-            "${{ secrets.RENDER_API_URL }}api/today" \
+            "${{ secrets.RENDER_API_URL }}health" \
             --max-time 15)
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
