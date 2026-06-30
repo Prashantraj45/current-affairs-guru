@@ -8,8 +8,7 @@
     "start": "node src/api/server.js",
     "job": "node src/jobs/dailyJob.js",
     "dev": "nodemon src/api/server.js",
-    "frontend": "cd frontend && npm run dev",
-    "postinstall": "npx puppeteer browsers install chrome"
+    "frontend": "cd frontend && npm run dev"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.28.0",
