@@ -3,7 +3,7 @@ name: Daily Intelligence Job
 on:
   schedule:
     # 11:30 PM UTC = 5:00 AM IST daily
-    - cron: '30 23 * * *'
+    - cron: '35 18 * * *'
   workflow_dispatch:
     inputs:
       date:
