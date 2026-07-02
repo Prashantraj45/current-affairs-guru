@@ -23,3 +23,17 @@ export function setCache(key, data, ttlMs = ONE_HOUR_MS) {
     localStorage.setItem(PREFIX + key, JSON.stringify({ data, expires: Date.now() + ttlMs }));
   } catch {}
 }
+
+export function getMsUntilMidnightIST() {
+  const now = new Date();
+  const currentUTC = now.getTime() + (now.getTimezoneOffset() * 60000);
+  
+  // IST is UTC + 5:30 (19,800,000 ms)
+  const ISTOffset = 19800000;
+  const currentIST = new Date(currentUTC + ISTOffset);
+  
+  const nextMidnightIST = new Date(currentIST);
+  nextMidnightIST.setHours(24, 0, 0, 0);
+  
+  return nextMidnightIST.getTime() - currentIST.getTime();
+}
