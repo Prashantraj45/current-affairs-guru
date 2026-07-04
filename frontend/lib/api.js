@@ -13,7 +13,7 @@
 
 import axios from 'axios';
 
-const api = axios.create({ timeout: 15000 });
+const api = axios.create({ timeout: 25000 });
 
 const _get = api.get.bind(api);
 

@@ -55,11 +55,18 @@ async function fetchBackend(pathSegments, query) {
   const qs = new URLSearchParams(q).toString();
   const url = `${BACKEND}/${path}${qs ? `?${qs}` : ''}`;
 
+  const startTime = Date.now();
+  console.log(`[PROXY] Fetching backend: ${url}`);
+  
   const res = await fetch(url, {
     headers: { Accept: 'application/json' },
     // Bypass any CDN cache on the backend side so we always get authoritative data
     cache: 'no-store',
   });
+  
+  const duration = Date.now() - startTime;
+  console.log(`[PROXY] Backend fetch completed in ${duration}ms for ${url}`);
+  
   if (!res.ok) throw new Error(`Backend responded ${res.status} for ${url}`);
   return res.json();
 }
@@ -105,6 +112,7 @@ export default async function handler(req, res) {
   // ── KV HIT: return stale data now, refresh in background ─────────────────
   const cached = await kvGet(cacheKey);
   if (cached) {
+    console.log(`[PROXY] Cache HIT for ${cacheKey}`);
     res.status(200).json(cached);
 
     // Background refresh (runs after response is flushed on Vercel/Node.js).
@@ -113,21 +121,48 @@ export default async function handler(req, res) {
     fetchBackend(segments, req.query)
       .then((fresh) => {
         if (shouldUpdateCache(cached, fresh)) {
+          console.log(`[PROXY] Background cache update for ${cacheKey}`);
           return kvSet(cacheKey, fresh, ttl);
+        } else {
+          console.log(`[PROXY] Cache is up to date for ${cacheKey}`);
         }
       })
-      .catch(() => {}); // Stale data was already sent; ignore background errors
+      .catch((err) => console.log(`[PROXY] Background fetch failed for ${cacheKey}:`, err.message));
 
     return;
   }
 
   // ── KV MISS: fetch, cache, return ────────────────────────────────────────
+  console.log(`[PROXY] Cache MISS for ${cacheKey}`);
   try {
-    const fresh = await fetchBackend(segments, req.query);
-    // Store in KV before responding (fire-and-forget the put; don't block the client)
-    kvSet(cacheKey, fresh, ttl).catch(() => {});
+    const fetchPromise = fetchBackend(segments, req.query).then((fresh) => {
+      // Store in KV before responding (fire-and-forget the put; don't block the client)
+      kvSet(cacheKey, fresh, ttl).then(() => {
+        console.log(`[PROXY] Cache populated for ${cacheKey}`);
+      }).catch(() => {});
+      return fresh;
+    });
+
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('BACKEND_TIMEOUT')), 2000); // 2s timeout for cold starts
+    });
+
+    const fresh = await Promise.race([fetchPromise, timeoutPromise]);
     res.status(200).json(fresh);
   } catch (err) {
-    res.status(502).json({ error: 'Backend unavailable', message: err.message });
+    if (err.message === 'BACKEND_TIMEOUT') {
+      console.log(`[PROXY] Timeout waiting for backend cold start for ${cacheKey}. Serving fallback.`);
+      // Return a graceful fallback instead of erroring, so the UI can render
+      // The fetchPromise is still running and will populate the cache when done.
+      res.status(200).json({
+        fallback: true,
+        message: 'Backend is starting up. Showing default data.',
+        entries: [],
+        date: new Date().toISOString()
+      });
+    } else {
+      console.log(`[PROXY] Backend fetch failed for ${cacheKey}:`, err.message);
+      res.status(502).json({ error: 'Backend unavailable', message: err.message });
+    }
   }
 }
