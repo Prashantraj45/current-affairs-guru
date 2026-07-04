@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight, Newspaper } from 'lucide-react';
 import CategoryBadge from './CategoryBadge';
 import ImportanceBadge from './ImportanceBadge';
 import CountUp from '../animations/CountUp';
@@ -38,7 +38,21 @@ export default function TopicCard({ topic, date, variant = 'compact' }) {
           {topic.summary}
         </p>
 
-        <div className="mt-5 flex items-center justify-between">
+        {topic.sources?.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <Newspaper className="h-3 w-3 shrink-0 text-amber-400/70" />
+            {topic.sources.slice(0, 2).map((src) => (
+              <span
+                key={src}
+                className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400/90"
+              >
+                {src}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-4 flex items-center justify-between">
           <p className="text-xs text-on-surface-variant">
             Score <CountUp value={topic.score || 0} className="font-semibold text-on-surface" /> / 100
           </p>

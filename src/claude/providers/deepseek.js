@@ -25,6 +25,7 @@ RULES:
 - PRIORITIZE: Governance, Economy, IR, Environment, Science/Tech, Reports, Polity, Ethics
 - Merge only if two items are the exact same event; keep distinct subtopics separate
 - Each topic must have all required fields
+- "sources": copy the exact "src" string(s) from whichever input news items contributed to this topic (1-3 max)
 
 TOPIC SCHEMA (return array of these):
 {
@@ -52,7 +53,8 @@ TOPIC SCHEMA (return array of these):
     "question": "Exam-style analytical question ≥15 words",
     "answer_framework": {"intro": "1 sentence", "body": ["pt1 ≥10 words", "pt2 ≥10 words", "pt3 ≥10 words"], "conclusion": "1 sentence"}
   },
-  "revision_note": "Compact ≤50 word summary for revision"
+  "revision_note": "Compact ≤50 word summary for revision",
+  "sources": ["copy src field values from whichever input news items this topic draws from"]
 }`;
 
 export async function callBatchTopics(newsBatch) {

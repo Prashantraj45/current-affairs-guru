@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useMemo, useState } from 'react';
+import { Newspaper } from 'lucide-react';
 import api from '../../lib/api';
 import CategoryBadge from '../../components/ui/CategoryBadge';
 import ImportanceBadge from '../../components/ui/ImportanceBadge';
@@ -65,6 +66,15 @@ export default function TopicDetailPage() {
           <span className="rounded-full border border-outline-variant px-3 py-1 text-xs text-on-surface-variant">
             Score {topic.score || 0}
           </span>
+          {topic.sources?.map((src) => (
+            <span
+              key={src}
+              className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-400"
+            >
+              <Newspaper className="h-3 w-3" />
+              {src}
+            </span>
+          ))}
         </div>
 
         <PageHeader label="Intelligence Brief" title={topic.title} meta={topic.date || date || ''} />

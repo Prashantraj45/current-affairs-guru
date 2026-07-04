@@ -69,6 +69,7 @@ Frontend proxy base: `https://your-vercel-domain.vercel.app/api/proxy`
   "explanation": "• point1\n• point2\n• point3",
   "facts": ["static fact1", "static fact2"],
   "tags": ["GS-2", "international-relations"],
+  "sources": ["Drishti IAS - News Analysis", "PIB - Ministry of External Affairs"],
   "prelims": {
     "key_facts": ["fact1", "fact2", "fact3"],
     "mcq": {
@@ -89,6 +90,8 @@ Frontend proxy base: `https://your-vercel-domain.vercel.app/api/proxy`
   "revision_note": "≤50 word compact summary for revision."
 }
 ```
+
+> **`sources`** — array of scraper source names that contributed to this topic. Populated by the AI from the `src` field of input news items. Absent on entries generated before this field was added (pre-July 2026). Displayed as amber pills on topic cards, list rows, and the topic detail page.
 
 ### Case Study
 
@@ -159,16 +162,24 @@ Pass 2 + 3 (parallel):
 [saveEntry] → MongoDB
 ```
 
-**Sources scraped (in priority order / interleave ratio 3:2:2:1):**
-- Drishti IAS (News Analysis + Editorials) — CA coaching content
-- Insights IAS — CA coaching content
-- PIB — Press Information Bureau English RSS (20 releases/day, with ministry tag); fetches via `PressReleaseIframePage.aspx` for full text. Each item tagged `source: "PIB - <Ministry Name>"`
-- Vision IAS (Daily Summary: The Hindu, IE, ET, Business Standard)
-- Vajiram & Ravi (Mains + Prelims)
-- Vision IAS subject pages 1–15 (via Puppeteer)
-- RSS: Indian Express, The Hindu National, The Hindu International
+**Sources scraped (interleave ratio 3 CA : 2 PIB : 2 Subject : 1 RSS per round):**
 
-> **PIB note:** PIB is behind Akamai CDN. The scraper uses a dedicated `fetchPIBUrl()` with Chrome browser headers and `Referer: https://www.pib.gov.in/` to bypass bot detection. The generic `fetchUrl()` (bot UA) is blocked.
+| Source | Tag prefix | Notes |
+|---|---|---|
+| Drishti IAS — News Analysis | `Drishti IAS - News Analysis` | Date-specific URL |
+| Drishti IAS — Editorials | `Drishti IAS - Editorials` | Date-specific URL |
+| Insights IAS | `Insights IAS` | Date-specific URL |
+| PIB (Press Information Bureau) | `PIB - <Ministry Name>` | English RSS → 20 releases/day; `PressReleaseIframePage.aspx` for HTML text. Uses `fetchPIBUrl()` with Chrome UA + Referer to bypass Akamai CDN |
+| Vision IAS — Daily Summary | `Vision IAS - Daily Summary` | |
+| Vision IAS — The Hindu / IE / ET / BS | `Vision IAS - <Paper>` | |
+| Vision IAS — Subject pages 1–15 | `Vision IAS - Subject N` | Puppeteer-rendered |
+| Vajiram & Ravi — Mains | `Vajiram & Ravi - Mains` | Date-specific URL |
+| Vajiram & Ravi — Prelims | `Vajiram & Ravi - Prelims` | Date-specific URL |
+| Indian Express RSS | `Indian Express` | Always-current |
+| The Hindu — National RSS | `The Hindu - India` | Always-current |
+| The Hindu — International RSS | `The Hindu - World` | Always-current |
+
+Source tags flow: scraper `source` field → AI sees as `src` in compressed input → AI returns `sources[]` on each topic → saved to MongoDB → displayed as amber pills on topic cards and detail page.
 
 **Deduplication layers:**
 1. `fetchNews`: sorted-word title key removes cross-source duplicates before AI sees them

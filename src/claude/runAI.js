@@ -14,7 +14,7 @@ function compressItem(item) {
   return {
     t: strip(item.title).substring(0, 90),
     s: strip(item.summary || item.description || '').substring(0, 200),
-    src: (item.source || '').substring(0, 30),
+    src: (item.source || '').substring(0, 50),
   };
 }
 
