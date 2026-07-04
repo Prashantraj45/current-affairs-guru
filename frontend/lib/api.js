@@ -1,37 +1,22 @@
+/**
+ * API client.
+ *
+ * All GET requests are routed through /api/proxy/[...path], the Next.js server
+ * route that handles Cloudflare KV caching and stale-while-revalidate.
+ * The proxy forwards misses to NEXT_PUBLIC_API_URL (the backend).
+ *
+ * Example: api.get('/api/today') → GET /api/proxy/api/today (local Next.js)
+ *          → proxy checks KV → returns cached or fresh backend data
+ *
+ * No browser storage (localStorage / sessionStorage) is used for caching.
+ */
+
 import axios from 'axios';
-import { getCache, setCache, getMsUntilMidnightIST } from './cache';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const api = axios.create({ timeout: 15000 });
 
-const api = axios.create({
-  baseURL: API_URL,
-  timeout: 15000,
-});
+const _get = api.get.bind(api);
 
-const originalGet = api.get;
-
-api.get = async (url, config = {}) => {
-  const cacheKey = `api_${url}`;
-  const cachedData = getCache(cacheKey);
-
-  // Always trigger the API call in background to wake server up / get fresh data
-  const fetchPromise = originalGet.call(api, url, config)
-    .then(response => {
-      setCache(cacheKey, response.data, getMsUntilMidnightIST());
-      return response;
-    })
-    .catch(err => {
-      // Ignore background errors if we have cache, otherwise throw
-      if (!cachedData) throw err;
-      return { data: cachedData, status: 200, fromCache: true };
-    });
-
-  if (cachedData) {
-    // Return immediately to bypass cold-start wait for the user
-    return { data: cachedData, status: 200, fromCache: true };
-  }
-
-  return fetchPromise;
-};
+api.get = (url, config = {}) => _get(`/api/proxy${url}`, config);
 
 export default api;

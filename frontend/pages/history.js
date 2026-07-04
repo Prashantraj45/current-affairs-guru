@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import api from '../lib/api';
-import { getCache, setCache } from '../lib/cache';
 import PageHeader from '../components/layout/PageHeader';
 import ScrollReveal from '../components/animations/ScrollReveal';
 import StaggerContainer from '../components/animations/StaggerContainer';
@@ -26,45 +25,23 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState('default'); // 'default' | 'score-desc' | 'score-asc'
 
-  // Load full history index (lightweight)
+  // Load full history index (lightweight).
+  // Stale-while-revalidate is handled server-side by the KV proxy.
   useEffect(() => {
     let active = true;
     async function load() {
-      const today = new Date().toISOString().slice(0, 10);
-      const cacheKey = `history_index_${today}`;
-      const cached = getCache(cacheKey);
-
-      // Show cached data immediately (stale-while-revalidate)
-      if (cached) {
+      try {
+        const r = await api.get('/api/history');
         if (active) {
-          setAllEntries(cached.entries || []);
-          const newest = cached.entries?.[0];
+          const fresh = r.data;
+          setAllEntries(fresh.entries || []);
+          const newest = fresh.entries?.[0];
           setActiveMonth(newest ? newest.date.slice(0, 7) : '');
           setRangeStart(newest?.date || null);
           setLoading(false);
         }
-      }
-
-      // Always fetch fresh — update if API returns more entries
-      try {
-        const r = await api.get('/api/history');
-        const fresh = r.data;
-        if (active) {
-          const freshCount = fresh.entries?.length || 0;
-          const cachedCount = cached?.entries?.length || 0;
-          if (!cached || freshCount !== cachedCount) {
-            setCache(cacheKey, fresh);
-            setAllEntries(fresh.entries || []);
-            const newest = fresh.entries?.[0];
-            setActiveMonth(newest ? newest.date.slice(0, 7) : '');
-            // Only reset rangeStart if not yet set (avoid clobbering user selection)
-            setRangeStart(prev => prev || newest?.date || null);
-          }
-        }
       } catch {
-        if (active && !cached) setAllEntries([]);
-      } finally {
-        if (active) setLoading(false);
+        if (active) { setAllEntries([]); setLoading(false); }
       }
     }
     load();

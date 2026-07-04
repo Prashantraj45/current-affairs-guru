@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../lib/api';
-import { getCache, setCache } from '../lib/cache';
 import PageHeader from '../components/layout/PageHeader';
 import SectionTitle from '../components/layout/SectionTitle';
 import TopicCard from '../components/ui/TopicCard';
@@ -17,39 +16,20 @@ export default function DashboardPage() {
   useEffect(() => {
     let active = true;
     async function load() {
-      const today = new Date().toISOString().slice(0, 10);
-      const cacheKey = `today_${today}`;
-      const cached = getCache(cacheKey);
-
-      // Show cached data immediately (stale-while-revalidate)
-      if (cached) {
-        if (active) { setPayload(cached); setLoading(false); }
-      }
-
-      // Always fetch fresh — update if API has newer date than cache
       try {
+        // Stale-while-revalidate is handled server-side by the KV proxy.
+        // The proxy returns cached KV data immediately and refreshes in the background.
         const response = await api.get('/api/today');
-        const fresh = response.data;
-        if (active) {
-          // Replace if no cache, or if fresh data is for a newer date
-          if (!cached || fresh.date > (cached.date || '')) {
-            setCache(cacheKey, fresh);
-            setPayload(fresh);
-          }
-        }
+        if (active) { setPayload(response.data); setLoading(false); }
       } catch (e) {
-        // Only show error if we have nothing to display
-        if (active && !cached) {
+        if (active) {
           setError(e?.response?.data?.error || e?.message || 'Could not load dashboard.');
+          setLoading(false);
         }
-      } finally {
-        if (active) setLoading(false);
       }
     }
     load();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, []);
 
   const topics = useMemo(() => payload?.topics || [], [payload?.topics]);
