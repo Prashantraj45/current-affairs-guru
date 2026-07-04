@@ -81,6 +81,8 @@ export async function callBatchTopics(newsBatch) {
 
 const CASE_STUDY_SYSTEM = `You are a UPSC mains case study writer. Given a list of today's current affairs topics, generate 5-6 deep policy/governance case studies suitable for UPSC GS-2/GS-3/GS-4 mains answers.
 
+CRITICAL DIVERSITY RULE: Each case study MUST cover a completely distinct policy domain or event. No two case studies may overlap thematically. Scan all generated case studies before finalising — reject and replace any that share a dominant theme with another.
+
 Return ONLY a JSON array of case study objects. No markdown, no prose outside JSON.
 
 CASE STUDY SCHEMA (return array of these):

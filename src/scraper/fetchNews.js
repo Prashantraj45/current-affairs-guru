@@ -332,14 +332,25 @@ async function fetchVisionSubjects() {
 
 // ─── Deduplication ────────────────────────────────────────────────────────────
 
+// Sort significant words so "India-US trade" and "US-India trade" share the same key.
+// Words ≤3 chars are noise (the, of, in, a) and excluded.
 function normalizeTitle(t) {
-  return t.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  return t.toLowerCase()
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter((w) => w.length > 3)
+    .sort()
+    .slice(0, 8)
+    .join(' ');
 }
 
 function deduplicateByTitle(items) {
   const seen = new Set();
   return items.filter((item) => {
     const key = normalizeTitle(item.title);
+    if (!key) return true; // keep untitled items — can't dedup them
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

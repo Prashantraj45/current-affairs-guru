@@ -18,14 +18,28 @@ function compressItem(item) {
   };
 }
 
+function normalizeKey(str) {
+  return str.toLowerCase()
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter((w) => w.length > 3)
+    .sort()
+    .slice(0, 8)
+    .join(' ');
+}
+
 /**
  * Split news items into batches of `size` for parallel Pass 1 calls.
- * Deduplicates by title before splitting.
+ * Deduplicates by sorted-word title key before splitting.
  */
 function splitIntoBatches(items, size = 8) {
   const seen = new Set();
   const unique = items.filter((item) => {
-    const key = (item.title || item.t || '').toLowerCase().slice(0, 50);
+    const raw = item.title || item.t || '';
+    if (!raw) return false;
+    const key = normalizeKey(raw);
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -53,7 +67,8 @@ export function compressMemory(readme) {
 // ─── Topic Merging ────────────────────────────────────────────────────────────
 
 /**
- * Deduplicate topics across batches by slug/title similarity.
+ * Deduplicate topics across batches by sorted-word key of title.
+ * Using sorted words catches LLM variants like "India-US Deal" vs "US-India Deal".
  * Keeps the entry with the higher score.
  */
 function mergeTopics(batches) {
@@ -61,7 +76,13 @@ function mergeTopics(batches) {
 
   for (const topic of batches.flat()) {
     if (!topic || !topic.title) continue;
-    const key = (topic.id || topic.title).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40);
+    // Primary key: sorted significant words from title (order-invariant)
+    const titleKey = normalizeKey(topic.title);
+    // Fallback: kebab-slug from id
+    const idKey = (topic.id || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40);
+    const key = titleKey || idKey;
+    if (!key) continue;
+
     const existing = map.get(key);
     if (!existing || (topic.score || 0) > (existing.score || 0)) {
       map.set(key, topic);
@@ -69,6 +90,21 @@ function mergeTopics(batches) {
   }
 
   return [...map.values()].sort((a, b) => (b.score || 0) - (a.score || 0));
+}
+
+/**
+ * Deduplicate case studies returned by the LLM.
+ * The LLM sometimes generates thematically identical studies under different titles.
+ */
+function deduplicateCaseStudies(caseStudies) {
+  const seen = new Set();
+  return caseStudies.filter((cs) => {
+    if (!cs || !cs.title) return false;
+    const key = normalizeKey(cs.title);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 // ─── Hash ─────────────────────────────────────────────────────────────────────
@@ -141,7 +177,9 @@ export async function processNewsBatch(newsBatch, previousREADME = null) {
     callInsights(topics),
   ]);
 
-  const caseStudies = caseStudyResult.status === 'fulfilled' ? caseStudyResult.value : [];
+  const caseStudies = deduplicateCaseStudies(
+    caseStudyResult.status === 'fulfilled' ? caseStudyResult.value : []
+  );
   const mcqs = mcqResult.status === 'fulfilled' ? mcqResult.value : [];
   const signalDeck = insightsResult.status === 'fulfilled' ? insightsResult.value : {};
 

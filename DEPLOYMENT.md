@@ -1,380 +1,151 @@
-# Deployment & Scheduling Guide
+# Production Deployment
 
-This guide covers deploying the UPSC AI system and scheduling daily jobs.
+Three independently deployed services: backend (Render), frontend (Vercel), scheduler (Azure Functions).
 
-## 🔄 Schedule Daily Job
+---
 
-### Option 1: Cron (Linux/Mac)
+## Backend — Render
 
-Edit your crontab:
-```bash
-crontab -e
+**Service type:** Web Service  
+**Build command:** `npm install`  
+**Start command:** `npm start`  
+**Node version:** 18+
+
+### Environment variables (set in Render dashboard)
+
+```env
+DEEPSEEK_API_KEY=
+MONGODB_URI=mongodb+srv://...
+ADMIN_SECRET=                    # 64-char random hex
+PORT=3000
+NODE_ENV=production
+CORS_ORIGIN=https://your-vercel-domain.vercel.app
+SCHEDULER_ENABLED=false          # scheduler runs via Azure Functions, not here
+PUPPETEER_EXECUTABLE_PATH=       # Render sets this automatically for Puppeteer buildpack
 ```
 
-Add this line to run daily at 6 AM:
-```cron
-0 6 * * * cd /Users/prashantraj/Desktop/current-affairs-guru && /usr/local/bin/node src/jobs/dailyJob.js >> logs/cron.log 2>&1
+### Puppeteer on Render
+
+Add the Puppeteer buildpack in Render settings or set `PUPPETEER_CACHE_DIR` to a writable path. The app uses `process.env.PUPPETEER_EXECUTABLE_PATH` with fallback to `puppeteer.executablePath()`.
+
+### Health check
+
+Configure Render health check path to `/health`.
+
+---
+
+## Frontend — Vercel
+
+**Framework preset:** Next.js  
+**Root directory:** `frontend`  
+**Build command:** `npm run build`  
+**Output directory:** `.next`
+
+### Environment variables (set in Vercel dashboard)
+
+```env
+NEXT_PUBLIC_API_URL=https://your-render-backend.onrender.com
+
+# Firebase
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+NEXT_PUBLIC_FIREBASE_APP_ID=
+
+# EmailJS
+NEXT_PUBLIC_EMAILJS_SERVICE_ID=
+NEXT_PUBLIC_EMAILJS_TEMPLATE_ID=
+NEXT_PUBLIC_EMAILJS_PUBLIC_KEY=
+
+# Cloudflare KV (server-side only, no NEXT_PUBLIC_ prefix)
+CF_ACCOUNT_ID=
+CF_KV_NAMESPACE_ID=
+CF_KV_API_TOKEN=
 ```
 
-Or use environment variables:
-```cron
-0 6 * * * cd /Users/prashantraj/Desktop/current-affairs-guru && ANTHROPIC_API_KEY=sk-ant-v7-xxx /usr/local/bin/node src/jobs/dailyJob.js
-```
+### Cloudflare KV setup
 
-### Option 2: PM2 (Process Manager)
+1. Cloudflare dashboard → Workers & Pages → KV → Create namespace
+2. Copy namespace ID → `CF_KV_NAMESPACE_ID`
+3. Create API token with **Workers KV Storage: Edit** permission → `CF_KV_API_TOKEN`
+4. Account ID from dashboard right sidebar → `CF_ACCOUNT_ID`
 
-Install PM2:
-```bash
-npm install -g pm2
-```
+KV keys follow the pattern `cag_proxy_{route}` (e.g. `cag_proxy_api/today`). TTL expires at midnight IST daily.
 
-Create `ecosystem.config.js`:
-```javascript
-module.exports = {
-  apps: [
-    {
-      name: 'upsc-api',
-      script: 'src/api/server.js',
-      exec_mode: 'cluster',
-      instances: 1,
-      env: {
-        NODE_ENV: 'production',
-        PORT: 3000,
-        ANTHROPIC_API_KEY: 'sk-ant-v7-xxx'
-      }
-    },
-    {
-      name: 'upsc-daily-job',
-      script: 'src/jobs/dailyJob.js',
-      exec_mode: 'fork',
-      cron_restart: '0 6 * * *',  // 6 AM daily
-      env: {
-        NODE_ENV: 'production',
-        ANTHROPIC_API_KEY: 'sk-ant-v7-xxx'
-      }
-    }
-  ]
-};
-```
+---
 
-Start services:
-```bash
-pm2 start ecosystem.config.js
-pm2 save
-pm2 startup
-```
+## Scheduler — Azure Functions
 
-### Option 3: GitHub Actions (Automated)
+The daily job runs as an Azure Functions Timer Trigger, separate from the backend process.
 
-Create `.github/workflows/daily-job.yml`:
-```yaml
-name: Daily UPSC Intelligence Job
-
-on:
-  schedule:
-    - cron: '0 6 * * *'  # 6 AM UTC daily
-
-jobs:
-  daily-job:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - run: npm install
-      - run: node src/jobs/dailyJob.js
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      - uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: database
-          path: db.json
-```
-
-### Option 4: Docker + Cron
-
-Create `Dockerfile`:
-```dockerfile
-FROM node:18-alpine
-
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm install --production
-
-COPY src ./src
-COPY .env .
-
-CMD ["node", "src/api/server.js"]
-```
-
-Create `docker-compose.yml`:
-```yaml
-version: '3.8'
-services:
-  api:
-    build: .
-    ports:
-      - "3000:3000"
-    environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - PORT=3000
-    volumes:
-      - ./db.json:/app/db.json
-      - ./system_memory.json:/app/system_memory.json
-```
-
-## 🚀 Deploy to Production
-
-### AWS Lambda (Serverless)
-
-1. Create `handler.js`:
-```javascript
-import { processNewsBatch } from './src/claude/runClaude.js';
-import { fetchNews } from './src/scraper/fetchNews.js';
-import { saveEntry, readREADME, writeREADME } from './src/db/db.js';
-
-export const handler = async (event) => {
-  try {
-    const newsBatch = await fetchNews(15);
-    const previousREADME = readREADME();
-    const output = await processNewsBatch(newsBatch, previousREADME);
-    
-    if (output.readme) writeREADME(output.readme);
-    saveEntry(output);
-    
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ success: true, topics: output.topics.length })
-    };
-  } catch (error) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message })
-    };
-  }
-};
-```
-
-2. Deploy with Serverless Framework:
-```bash
-npm install -g serverless
-serverless deploy
-```
-
-### Google Cloud Run
-
-Create `deploy.sh`:
-```bash
-gcloud build submit --tag gcr.io/PROJECT_ID/upsc-ai
-gcloud run deploy upsc-ai \
-  --image gcr.io/PROJECT_ID/upsc-ai \
-  --platform managed \
-  --region us-central1 \
-  --set-env-vars ANTHROPIC_API_KEY=sk-ant-v7-xxx \
-  --allow-unauthenticated
-```
-
-### Heroku
+### Deploy
 
 ```bash
-heroku create upsc-ai
-heroku config:set ANTHROPIC_API_KEY=sk-ant-v7-xxx
-git push heroku main
+# From repo root
+func azure functionapp publish <your-function-app-name>
 ```
 
-## 📊 Monitoring
+Or use the GitHub Actions workflow in `.github/workflows/` which deploys on push to `main`.
 
-### Setup Logging
+### Environment variables (set in Azure Function App → Configuration)
 
-Create `src/utils/logger.js`:
-```javascript
-import fs from 'fs';
-import path from 'path';
-
-const logsDir = './logs';
-if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir);
-
-export function log(message, level = 'INFO') {
-  const timestamp = new Date().toISOString();
-  const logEntry = `[${timestamp}] ${level}: ${message}`;
-  console.log(logEntry);
-  
-  fs.appendFileSync(
-    path.join(logsDir, 'app.log'),
-    logEntry + '\n'
-  );
-}
+```env
+DEEPSEEK_API_KEY=
+MONGODB_URI=
+ADMIN_SECRET=
+SCHEDULER_ENABLED=true
+JOB_TIME=05:00          # UTC time HH:MM, e.g. 05:00 = 10:30 IST
+NODE_ENV=production
 ```
 
-### Health Monitoring
+### Timer schedule
 
-Setup monitoring with tools like:
-- **Sentry** - Error tracking
-- **LogRocket** - Session replay
-- **Datadog** - Infrastructure monitoring
-- **New Relic** - Performance monitoring
+The trigger fires at the time specified by `JOB_TIME`. Default is `05:00 UTC` (10:30 AM IST). Modify the cron expression in `src/functions/timerTrigger.js` or the Azure portal if you change `JOB_TIME`.
 
-### Example Sentry Integration
+### Job lock
+
+The job uses a MongoDB-based distributed lock (`src/models/Lock.js`) with a 1-hour TTL. If the job crashes and leaves the lock held, release it via:
 
 ```bash
-npm install @sentry/node
-```
-
-In `src/jobs/dailyJob.js`:
-```javascript
-import * as Sentry from "@sentry/node";
-
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  tracesSampleRate: 1.0,
-});
-
-try {
-  // Your job code
-} catch (error) {
-  Sentry.captureException(error);
-}
-```
-
-## 🔄 CI/CD Pipeline
-
-### GitHub Actions for Testing
-
-Create `.github/workflows/test.yml`:
-```yaml
-name: Tests
-
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - run: npm install
-      - run: npm test
-      - run: npm run lint
-```
-
-## 🔒 Environment Variables
-
-Production checklist:
-- ✅ ANTHROPIC_API_KEY - Set in secrets manager
-- ✅ NODE_ENV - Set to 'production'
-- ✅ DB_PATH - Point to persistent storage
-- ✅ README_PATH - Point to persistent storage
-- ✅ PORT - Set to 3000 or cloud-specific port
-
-## 📈 Scaling Considerations
-
-### Current Limitations
-- File-based storage (db.json) - Works for ~1 year of daily data
-- Single-process API - Adequate for <100 concurrent users
-
-### Future Improvements
-- **Scale DB**: Migrate to MongoDB, PostgreSQL, or DynamoDB
-- **Scale API**: Use load balancer (nginx) or serverless
-- **Cache**: Add Redis for frequently accessed data
-- **Queue**: Use Bull or RabbitMQ for batched processing
-
-### Database Migration
-
-When ready to migrate from JSON:
-
-```javascript
-// export-to-db.js
-import { readDB } from './src/db/db.js';
-import mongoose from 'mongoose';
-
-const entrySchema = new mongoose.Schema({
-  date: String,
-  plan: Object,
-  readme: Object,
-  topics: Array,
-  ui_output: Object
-});
-
-const Entry = mongoose.model('Entry', entrySchema);
-
-async function migrate() {
-  const db = readDB();
-  await Entry.insertMany(db.entries);
-  console.log(`Migrated ${db.entries.length} entries`);
-}
-
-migrate();
-```
-
-## 🔄 Backup Strategy
-
-### Automated Backups
-
-Create `backup.js`:
-```javascript
-import fs from 'fs';
-import path from 'path';
-
-const timestamp = new Date().toISOString().split('T')[0];
-const backupDir = './backups';
-
-if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir);
-
-['db.json', 'system_memory.json'].forEach(file => {
-  fs.copyFileSync(file, path.join(backupDir, `${file}.${timestamp}`));
-});
-
-console.log('Backup complete');
-```
-
-Schedule in crontab:
-```cron
-0 0 * * * cd /Users/prashantraj/Desktop/current-affairs-guru && node backup.js
-```
-
-Or add to PM2 ecosystem:
-```javascript
-{
-  name: 'upsc-backup',
-  script: 'backup.js',
-  cron_restart: '0 0 * * *'  // Midnight daily
-}
-```
-
-## 📞 Troubleshooting Deployments
-
-**Cron not running?**
-```bash
-# Check crontab
-crontab -l
-
-# Test manually
-node src/jobs/dailyJob.js
-
-# Check logs
-tail -f logs/cron.log
-```
-
-**PM2 not restarting?**
-```bash
-pm2 monit
-pm2 logs upsc-daily-job
-```
-
-**Lambda timeout?**
-Increase timeout in serverless.yml:
-```yaml
-functions:
-  dailyJob:
-    handler: handler.handler
-    timeout: 60
+curl -X POST https://your-backend.onrender.com/api/admin/release-lock \
+  -H "x-admin-key: YOUR_ADMIN_SECRET"
 ```
 
 ---
 
-**Ready to deploy!** Choose your platform above and follow the steps.
+## MongoDB Atlas
+
+1. Create free cluster at mongodb.com/cloud/atlas
+2. Database Access → create user with `readWrite` on `upsc-ai` database
+3. Network Access → add `0.0.0.0/0` (or restrict to Render/Azure outbound IPs)
+4. Connect → Drivers → copy connection string → replace `<password>`
+
+---
+
+## CI/CD
+
+GitHub Actions workflow (`.github/workflows/`) handles:
+- On push to `main`: deploy to Azure Function App
+
+Backend (Render) and frontend (Vercel) auto-deploy from their own GitHub integrations.
+
+---
+
+## Smoke test after deploy
+
+```bash
+# Backend health
+curl https://your-backend.onrender.com/health
+
+# Today's data
+curl https://your-backend.onrender.com/api/today | jq '.topics | length'
+
+# Frontend proxy (via Vercel)
+curl https://your-vercel-domain.vercel.app/api/proxy/api/today | jq '.topics | length'
+
+# Admin status
+curl https://your-backend.onrender.com/api/admin/status \
+  -H "x-admin-key: YOUR_ADMIN_SECRET"
+```
