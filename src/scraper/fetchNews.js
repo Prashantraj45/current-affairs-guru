@@ -2,6 +2,7 @@ import http from 'http';
 import https from 'https';
 import puppeteer from 'puppeteer';
 import Parser from 'rss-parser';
+import fs from 'fs';
 
 const parser = new Parser({
   timeout: 10000,
@@ -290,7 +291,23 @@ async function fetchVisionSubjects() {
   try {
     // executablePath: resolve against the same cache dir puppeteer.config.cjs uses,
     // so Render finds Chrome inside the project directory at runtime.
-    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath();
+    let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath();
+    
+    if (!fs.existsSync(executablePath)) {
+      const fallbacks = [
+        '/usr/bin/google-chrome',
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/chromium',
+        '/usr/bin/chromium-browser',
+      ];
+      for (const p of fallbacks) {
+        if (fs.existsSync(p)) {
+          executablePath = p;
+          break;
+        }
+      }
+    }
+
     console.log(`[Puppeteer] Using Chrome at: ${executablePath}`);
     browser = await puppeteer.launch({
       headless: true,

@@ -7,9 +7,29 @@ function getClient() {
 }
 
 function extractJson(text) {
-  try { return JSON.parse(text); } catch {}
-  const match = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-  if (match) return JSON.parse(match[0]);
+  let cleaned = text.trim();
+  
+  // 1. Remove markdown code blocks
+  cleaned = cleaned.replace(/```json/gi, '').replace(/```/g, '');
+  
+  // 2. Fix bullet points outside strings (e.g., • "Text" -> "Text")
+  cleaned = cleaned.replace(/^[ \t]*[•\-]\s*"/gm, '"');
+  
+  try { return JSON.parse(cleaned); } catch {}
+  
+  const match = cleaned.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+  if (match) {
+    let jsonStr = match[0];
+    try { return JSON.parse(jsonStr); } catch {}
+    
+    // 3. Fallback: Fix unescaped control characters in string literals
+    jsonStr = jsonStr.replace(/[\n\r\t]+/g, ' ');
+    jsonStr = jsonStr.replace(/[\u0000-\u001F]+/g, '');
+    
+    try { return JSON.parse(jsonStr); } catch (err) {
+      throw new Error(`JSON Parse Error: ${err.message}`);
+    }
+  }
   throw new Error('No valid JSON found in response');
 }
 
