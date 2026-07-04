@@ -237,6 +237,8 @@ async function scrapeVisionSubjectPage(page, subjectId) {
         ...document.querySelectorAll('[class*="ca-card"]'),
         ...document.querySelectorAll('[class*="ArticleCard"]'),
         ...document.querySelectorAll('[class*="news-card"]'),
+        // Vision IAS new DOM structure: they use an <a> tag directly as the card, usually with a date in the URL
+        ...document.querySelectorAll('a[href*="/202"][class*="block"]')
       ];
 
       // Deduplicate DOM nodes
@@ -249,16 +251,17 @@ async function scrapeVisionSubjectPage(page, subjectId) {
 
       for (const card of unique.slice(0, 8)) {
         // Extract title — try heading tags first
-        const titleEl = card.querySelector('h1,h2,h3,h4,a[href*="current-affairs"]');
-        const title = titleEl?.innerText?.trim() || '';
+        const titleEl = card.querySelector('h1,h2,h3,h4') || (card.tagName.toLowerCase() === 'a' ? card : card.querySelector('a[href*="current-affairs"]'));
+        let title = titleEl?.innerText?.trim() || '';
+        // Often titles have random prefixes or they are too short
         if (!title || title.length < 10) continue;
 
         // Extract summary from paragraph or description element
         const summaryEl = card.querySelector('p, [class*="description"], [class*="summary"], [class*="excerpt"]');
         const summary = summaryEl?.innerText?.trim()?.substring(0, 400) || '';
 
-        const linkEl = card.querySelector('a[href]');
-        const url = linkEl?.href || '';
+        // Extract URL
+        const url = card.tagName.toLowerCase() === 'a' ? card.href : (card.querySelector('a[href]')?.href || '');
 
         results.push({
           title,
