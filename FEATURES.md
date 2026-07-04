@@ -159,13 +159,16 @@ Pass 2 + 3 (parallel):
 [saveEntry] → MongoDB
 ```
 
-**Sources scraped (in priority order):**
-- Drishti IAS (News Analysis + Editorials)
-- Insights IAS
+**Sources scraped (in priority order / interleave ratio 3:2:2:1):**
+- Drishti IAS (News Analysis + Editorials) — CA coaching content
+- Insights IAS — CA coaching content
+- PIB — Press Information Bureau English RSS (20 releases/day, with ministry tag); fetches via `PressReleaseIframePage.aspx` for full text. Each item tagged `source: "PIB - <Ministry Name>"`
 - Vision IAS (Daily Summary: The Hindu, IE, ET, Business Standard)
 - Vajiram & Ravi (Mains + Prelims)
 - Vision IAS subject pages 1–15 (via Puppeteer)
 - RSS: Indian Express, The Hindu National, The Hindu International
+
+> **PIB note:** PIB is behind Akamai CDN. The scraper uses a dedicated `fetchPIBUrl()` with Chrome browser headers and `Referer: https://www.pib.gov.in/` to bypass bot detection. The generic `fetchUrl()` (bot UA) is blocked.
 
 **Deduplication layers:**
 1. `fetchNews`: sorted-word title key removes cross-source duplicates before AI sees them

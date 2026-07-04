@@ -330,6 +330,204 @@ async function fetchVisionSubjects() {
   return all;
 }
 
+// ─── PIB (Press Information Bureau) ──────────────────────────────────────────
+// Strategy:
+//   1. Hindi RSS gives PRIDs for the most recent ~20 national releases (PRIDs are language-agnostic)
+//   2. Each PRID is fetched via PressReleaseIframePage.aspx?lang=1 which returns English text
+//   3. Ministry name in MinistryName div comes in Hindi → translate via static map
+//   4. Releases with no substantial English content are dropped
+
+const PIB_RSS = 'https://www.pib.gov.in/RssMain.aspx?ModId=6&Lang=1&reg=48';
+const PIB_IFRAME = (prid) =>
+  `https://www.pib.gov.in/PressReleaseIframePage.aspx?PRID=${prid}&reg=48&lang=1`;
+
+const PIB_MINISTRY_MAP = {
+  'प्रधानमंत्री कार्यालय': "Prime Minister's Office",
+  'वित्त मंत्रालय': 'Ministry of Finance',
+  'गृह मंत्रालय': 'Ministry of Home Affairs',
+  'विदेश मंत्रालय': 'Ministry of External Affairs',
+  'रक्षा मंत्रालय': 'Ministry of Defence',
+  'शिक्षा मंत्रालय': 'Ministry of Education',
+  'स्वास्थ्य एवं परिवार कल्याण मंत्रालय': 'Ministry of Health & Family Welfare',
+  'पर्यावरण, वन और जलवायु परिवर्तन मंत्रालय': 'Ministry of Environment, Forest & Climate Change',
+  'विज्ञान और प्रौद्योगिकी मंत्रालय': 'Ministry of Science & Technology',
+  'वाणिज्य एवं उद्योग मंत्रालय': 'Ministry of Commerce & Industry',
+  'कृषि एवं किसान कल्याण मंत्रालय': 'Ministry of Agriculture & Farmers Welfare',
+  'ग्रामीण विकास मंत्रालय': 'Ministry of Rural Development',
+  'रेल मंत्रालय': 'Ministry of Railways',
+  'सड़क परिवहन और राजमार्ग मंत्रालय': 'Ministry of Road Transport & Highways',
+  'जल शक्ति मंत्रालय': 'Ministry of Jal Shakti',
+  'ऊर्जा मंत्रालय': 'Ministry of Power',
+  'इलेक्ट्रॉनिक्स और सूचना प्रौद्योगिकी मंत्रालय': 'Ministry of Electronics & IT',
+  'नवीन और नवीकरणीय ऊर्जा मंत्रालय': 'Ministry of New & Renewable Energy',
+  'श्रम और रोजगार मंत्रालय': 'Ministry of Labour & Employment',
+  'कानून और न्याय मंत्रालय': 'Ministry of Law & Justice',
+  'संसदीय कार्य मंत्रालय': 'Ministry of Parliamentary Affairs',
+  'पेट्रोलियम और प्राकृतिक गैस मंत्रालय': 'Ministry of Petroleum & Natural Gas',
+  'आवास और शहरी कार्य मंत्रालय': 'Ministry of Housing & Urban Affairs',
+  'मत्स्य पालन, पशुपालन और डेयरी मंत्रालय': 'Ministry of Fisheries, Animal Husbandry & Dairying',
+  'सूचना और प्रसारण मंत्रालय': 'Ministry of Information & Broadcasting',
+  'राष्ट्रपति सचिवालय': "President's Secretariat",
+  'उपराष्ट्रपति सचिवालय': "Vice President's Secretariat",
+  'कैबिनेट': 'Cabinet',
+  'कैबिनेट सचिवालय': 'Cabinet Secretariat',
+  'अंतरिक्ष विभाग': 'Department of Space',
+  'परमाणु ऊर्जा विभाग': 'Department of Atomic Energy',
+  'नीति आयोग': 'NITI Aayog',
+  'भारत निर्वाचन आयोग': 'Election Commission of India',
+  'इस्पात मंत्रालय': 'Ministry of Steel',
+  'खान मंत्रालय': 'Ministry of Mines',
+  'कौशल विकास और उद्यमिता मंत्रालय': 'Ministry of Skill Development & Entrepreneurship',
+  'सांख्यिकी और कार्यक्रम कार्यान्वयन मंत्रालय': 'Ministry of Statistics & Programme Implementation',
+  'आयुष मंत्रालय': 'Ministry of Ayush',
+  'महिला एवं बाल विकास मंत्रालय': 'Ministry of Women & Child Development',
+  'सामाजिक न्याय और अधिकारिता मंत्रालय': 'Ministry of Social Justice & Empowerment',
+  'जनजातीय कार्य मंत्रालय': 'Ministry of Tribal Affairs',
+  'अल्पसंख्यक कार्य मंत्रालय': 'Ministry of Minority Affairs',
+  'युवा कार्यक्रम और खेल मंत्रालय': 'Ministry of Youth Affairs & Sports',
+  'पंचायती राज मंत्रालय': 'Ministry of Panchayati Raj',
+  'सहकारिता मंत्रालय': 'Ministry of Cooperation',
+  'खाद्य प्रसंस्करण उद्योग मंत्रालय': 'Ministry of Food Processing Industries',
+  'नागर विमानन मंत्रालय': 'Ministry of Civil Aviation',
+  'पत्तन, पोत परिवहन और जलमार्ग मंत्रालय': 'Ministry of Ports, Shipping & Waterways',
+  'वस्त्र मंत्रालय': 'Ministry of Textiles',
+  'उपभोक्ता मामले, खाद्य और सार्वजनिक वितरण मंत्रालय': 'Ministry of Consumer Affairs, Food & Public Distribution',
+  'भारी उद्योग मंत्रालय': 'Ministry of Heavy Industries',
+  'कोयला मंत्रालय': 'Ministry of Coal',
+  'रसायन और उर्वरक मंत्रालय': 'Ministry of Chemicals & Fertilizers',
+  'कॉर्पोरेट कार्य मंत्रालय': 'Ministry of Corporate Affairs',
+};
+
+function translateMinistry(raw) {
+  const t = raw.trim();
+  if (PIB_MINISTRY_MAP[t]) return PIB_MINISTRY_MAP[t];
+  // Devanagari → unknown ministry, just return PIB
+  if (/[ऀ-ॿ]/.test(t)) return 'PIB';
+  return t || 'PIB';
+}
+
+// PIB is behind Akamai CDN which blocks generic bot UAs.
+// This wrapper sends browser-like headers so requests get through.
+function fetchPIBUrl(url, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    const lib = url.startsWith('https') ? https : http;
+    const req = lib.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'identity',
+        Referer: 'https://www.pib.gov.in/',
+      },
+    }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return fetchPIBUrl(res.headers.location, timeoutMs).then(resolve).catch(reject);
+      }
+      if (res.statusCode === 404) return reject(new Error('404 Not Found'));
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => resolve(data));
+    });
+    req.setTimeout(timeoutMs, () => { req.destroy(); reject(new Error('Timeout')); });
+    req.on('error', reject);
+  });
+}
+
+// True if text has substantially more Latin than Devanagari characters.
+function isEnglish(text) {
+  const deva = (text.match(/[ऀ-ॿ]/g) || []).length;
+  const latin = (text.match(/[a-zA-Z]/g) || []).length;
+  return latin > deva * 2 && latin > 20;
+}
+
+async function fetchPIBPRIDs() {
+  try {
+    const xml = await fetchPIBUrl(PIB_RSS, 15000);
+    const seen = new Set();
+    const prids = [];
+    const re = /PRID=(\d+)/g;
+    let m;
+    while ((m = re.exec(xml)) !== null) {
+      if (!seen.has(m[1])) { seen.add(m[1]); prids.push(m[1]); }
+    }
+    return prids;
+  } catch (err) {
+    console.error('[PIB] RSS failed:', err.message);
+    return [];
+  }
+}
+
+async function fetchPIBRelease(prid) {
+  try {
+    const html = await fetchPIBUrl(PIB_IFRAME(prid), 15000);
+    const clean = html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '');
+
+    // Title is in <h2 id="Titleh2"> on PIB IframePage
+    const h2m = clean.match(/id="Titleh2"[^>]*>([\s\S]*?)<\/h2>/i);
+    const title = h2m ? stripTags(h2m[1]).trim() : '';
+    if (!title || title.length < 10 || !isEnglish(title)) return null;
+
+    // Ministry — MinistryName div (Hindi text, translate via map)
+    const minm = clean.match(/id="MinistryName"[^>]*>([\s\S]*?)<\/div>/i);
+    const ministry = minm ? translateMinistry(stripTags(minm[1])) : 'PIB';
+
+    // Body text — first 4 substantial English paragraphs
+    const textParts = [];
+    const pRe = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+    let match;
+    let charCount = 0;
+    while ((match = pRe.exec(clean)) !== null && charCount < 500) {
+      const text = stripTags(match[1]).trim();
+      const isNoise = /pic\.twitter\.com|twitter\.com|t\.co\/|instagram\.com|facebook\.com|youtu\.be|youtube\.com/i.test(text);
+      if (text.length > 30 && isEnglish(text) && !isNoise) {
+        textParts.push(text);
+        charCount += text.length;
+      }
+    }
+
+    const summary = textParts.slice(0, 4).join(' | ').substring(0, 500);
+
+    return {
+      title,
+      summary,
+      url: PIB_IFRAME(prid),
+      source: `PIB - ${ministry}`,
+      ministry,
+      pubDate: new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchPIB(maxItems = 20) {
+  console.log('[PIB] Fetching RSS for PRIDs...');
+  const prids = await fetchPIBPRIDs();
+
+  if (!prids.length) {
+    console.log('[PIB] No PRIDs from RSS');
+    return [];
+  }
+  console.log(`[PIB] ${prids.length} PRIDs — fetching English releases in batches of 5...`);
+
+  const BATCH = 5;
+  const items = [];
+
+  for (let i = 0; i < prids.length && items.length < maxItems; i += BATCH) {
+    const batch = prids.slice(i, i + BATCH);
+    const results = await Promise.allSettled(batch.map((prid) => fetchPIBRelease(prid)));
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value) items.push(r.value);
+    }
+  }
+
+  console.log(`[PIB] ✓ ${items.length} English releases fetched`);
+  return items;
+}
+
 // ─── Deduplication ────────────────────────────────────────────────────────────
 
 // Sort significant words so "India-US trade" and "US-India trade" share the same key.
@@ -360,39 +558,45 @@ function deduplicateByTitle(items) {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Fetch from all sources — RSS, plain-HTTP CA sites, and Puppeteer Vision IAS subjects.
+ * Fetch from all sources — RSS, plain-HTTP CA sites, Puppeteer Vision IAS subjects, and PIB.
  * Returns up to `limit` deduplicated items.
  *
- * Interleave order: CA → Subject → RSS so AI always gets editorial-heavy content first.
+ * Interleave priority: CA (editorial) → PIB (official govt) → Subject (subject-wise) → RSS (raw news)
  */
 export async function fetchNews(limit = 80, targetDate) {
   const dateParts = getDateParts(targetDate);
   console.log(`[fetchNews] Target date: ${dateParts.yyyy}-${dateParts.mm}-${dateParts.dd}`);
 
-  const [rssResult, caResult, subjectResult] = await Promise.allSettled([
+  const [rssResult, caResult, subjectResult, pibResult] = await Promise.allSettled([
     fetchRSS(),
     fetchCASites(15, dateParts),
     fetchVisionSubjects(),
+    fetchPIB(20),
   ]);
 
-  const rss = rssResult.status === 'fulfilled' ? rssResult.value : [];
-  const ca = caResult.status === 'fulfilled' ? caResult.value : [];
-  const subjects = subjectResult.status === 'fulfilled' ? subjectResult.value : [];
+  const rss      = rssResult.status     === 'fulfilled' ? rssResult.value      : [];
+  const ca       = caResult.status      === 'fulfilled' ? caResult.value       : [];
+  const subjects = subjectResult.status === 'fulfilled' ? subjectResult.value  : [];
+  const pib      = pibResult.status     === 'fulfilled' ? pibResult.value      : [];
 
-  // Interleave: 3 CA → 2 Subject → 1 RSS per round
+  // Interleave: 3 CA → 2 PIB → 2 Subject → 1 RSS per round
   const interleaved = [];
-  const caQ = [...ca];
-  const subQ = [...subjects];
-  const rssQ = [...rss];
+  const caQ   = [...ca];
+  const pibQ  = [...pib];
+  const subQ  = [...subjects];
+  const rssQ  = [...rss];
 
-  while (caQ.length || subQ.length || rssQ.length) {
-    for (let i = 0; i < 3 && caQ.length; i++) interleaved.push(caQ.shift());
+  while (caQ.length || pibQ.length || subQ.length || rssQ.length) {
+    for (let i = 0; i < 3 && caQ.length;  i++) interleaved.push(caQ.shift());
+    for (let i = 0; i < 2 && pibQ.length; i++) interleaved.push(pibQ.shift());
     for (let i = 0; i < 2 && subQ.length; i++) interleaved.push(subQ.shift());
     if (rssQ.length) interleaved.push(rssQ.shift());
   }
 
   const merged = deduplicateByTitle(interleaved);
-  console.log(`✓ Sources: RSS ${rss.length}, CA ${ca.length}, Subjects ${subjects.length} → merged ${merged.length}`);
+  console.log(
+    `✓ Sources: CA ${ca.length}, PIB ${pib.length}, Subjects ${subjects.length}, RSS ${rss.length} → merged ${merged.length}`
+  );
   return merged.slice(0, limit);
 }
 
