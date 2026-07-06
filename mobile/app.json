@@ -19,7 +19,6 @@
       "permissions": ["RECEIVE_BOOT_COMPLETED", "VIBRATE"]
     },
     "plugins": [
-      "expo-apple-authentication",
       ["expo-notifications", { "icon": "./assets/icon.png", "color": "#6366f1" }]
     ],
     "extra": { "eas": { "projectId": "PLACEHOLDER" } }

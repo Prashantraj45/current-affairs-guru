@@ -41,7 +41,7 @@ jobs:
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
-      - run: eas build --profile preview --platform all --non-interactive
+      - run: eas build --profile preview --platform android --non-interactive
 
   eas-production:
     needs: check
@@ -62,5 +62,5 @@ jobs:
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
-      - run: eas build --profile production --platform all --non-interactive
-      - run: eas submit --platform all --non-interactive
+      - run: eas build --profile production --platform android --non-interactive
+      - run: eas submit --platform android --non-interactive
