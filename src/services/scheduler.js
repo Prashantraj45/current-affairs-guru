@@ -3,6 +3,7 @@ import { fetchNews } from '../scraper/fetchNews.js';
 import { processNewsBatch } from '../claude/runAI.js';
 import { saveEntry, readREADME, writeREADME, entryExists } from '../db/db.js';
 import { acquireLock, releaseLock, isLocked, getLockStatus } from '../models/Lock.js';
+import { sendDailyPushNotifications } from './pushNotifications.js';
 
 let scheduledJob = null;
 const JOB_NAME = 'daily_intelligence';
@@ -126,7 +127,12 @@ export async function runDailyJob(targetDate, { force = false } = {}) {
     await saveEntry(entry, jobDate);
     console.log(`✓ Saved ${entry.topics.length} topics for ${jobDate}`);
 
-    // Step 6: Summary
+    // Step 6: Push notifications
+    console.log('\n[STEP 6] Sending push notifications...');
+    await sendDailyPushNotifications({ date: jobDate, topicCount: entry.topics.length });
+    console.log('✓ Push notifications sent');
+
+    // Step 7: Summary
     console.log('\n========================================');
     console.log('JOB COMPLETED SUCCESSFULLY');
     console.log(`Topics: ${entry.topics.length}`);

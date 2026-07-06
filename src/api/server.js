@@ -18,6 +18,8 @@ import {
 import { getJobStatus as getSchedulerStatus, runDailyJob, startScheduler as initScheduler, stopScheduler as stopJob } from '../services/scheduler.js';
 import { releaseLock, forceUnlock } from '../models/Lock.js';
 import { callCaseStudies } from '../claude/providers/deepseek.js';
+import authRoutes from './authRoutes.js';
+import userRoutes from './userRoutes.js';
 config({ override: true });
 
 const app = express();
@@ -79,8 +81,8 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', origin);
   }
 
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, x-admin-key');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, x-admin-key, Authorization');
   res.header('Access-Control-Allow-Credentials', 'true');
 
   // Handle preflight
@@ -148,6 +150,10 @@ function verifyAdminKey(req, res, next) {
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
+
+// Auth + User routes
+app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
