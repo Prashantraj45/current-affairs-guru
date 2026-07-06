@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Current Affairs Guru",
+    "slug": "current-affairs-guru",
+    "version": "1.0.0",
+    "scheme": "cag",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": { "image": "./assets/splash.png", "resizeMode": "contain", "backgroundColor": "#1a1a2e" },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cag.currentaffairsguru",
+      "infoPlist": { "NSUserNotificationUsageDescription": "We send daily current affairs updates." }
+    },
+    "android": {
+      "package": "com.cag.currentaffairsguru",
+      "adaptiveIcon": { "foregroundImage": "./assets/adaptive-icon.png", "backgroundColor": "#1a1a2e" },
+      "permissions": ["RECEIVE_BOOT_COMPLETED", "VIBRATE"]
+    },
+    "plugins": [
+      "expo-apple-authentication",
+      ["expo-notifications", { "icon": "./assets/icon.png", "color": "#6366f1" }]
+    ],
+    "extra": { "eas": { "projectId": "PLACEHOLDER" } }
+  }
+}
