@@ -293,27 +293,32 @@ async function fetchVisionSubjects() {
     // so Render finds Chrome inside the project directory at runtime.
     let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath();
     
-    if (!fs.existsSync(executablePath)) {
+    if (executablePath && !fs.existsSync(executablePath)) {
       const fallbacks = [
         '/usr/bin/google-chrome',
         '/usr/bin/google-chrome-stable',
         '/usr/bin/chromium',
         '/usr/bin/chromium-browser',
+        puppeteer.executablePath(),
       ];
+      
+      executablePath = undefined;
       for (const p of fallbacks) {
-        if (fs.existsSync(p)) {
+        if (p && fs.existsSync(p)) {
           executablePath = p;
           break;
         }
       }
     }
 
-    console.log(`[Puppeteer] Using Chrome at: ${executablePath}`);
-    browser = await puppeteer.launch({
+    const launchOptions = {
       headless: true,
-      executablePath,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
+    };
+    if (executablePath) launchOptions.executablePath = executablePath;
+
+    console.log(`[Puppeteer] Using Chrome at: ${executablePath || 'default'}`);
+    browser = await puppeteer.launch(launchOptions);
 
     // Run subjects in batches of 5 concurrently
     const BATCH_SIZE = 5;

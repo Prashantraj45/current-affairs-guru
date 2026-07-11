@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { jsonrepair } from 'jsonrepair';
 
 function getClient() {
   const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
@@ -26,7 +27,13 @@ function extractJson(text) {
     jsonStr = jsonStr.replace(/[\n\r\t]+/g, ' ');
     jsonStr = jsonStr.replace(/[\u0000-\u001F]+/g, '');
     
-    try { return JSON.parse(jsonStr); } catch (err) {
+    try { return JSON.parse(jsonStr); } catch {}
+    
+    // 4. jsonrepair fallback for unescaped quotes, missing commas, etc.
+    try {
+      const repaired = jsonrepair(jsonStr);
+      return JSON.parse(repaired);
+    } catch (err) {
       throw new Error(`JSON Parse Error: ${err.message}`);
     }
   }
