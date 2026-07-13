@@ -30,18 +30,46 @@ export default function HistoryPage() {
   useEffect(() => {
     let active = true;
     async function load() {
+      const cacheKey = 'cag_history_cache';
+      let currentCache = null;
+      
+      // 1. Serve from frontend cache immediately
+      try {
+        const cachedStr = localStorage.getItem(cacheKey);
+        if (cachedStr) {
+          const cachedData = JSON.parse(cachedStr);
+          if (active && cachedData?.entries) {
+            currentCache = cachedData;
+            setAllEntries(cachedData.entries);
+            const newest = cachedData.entries[0];
+            setActiveMonth(newest ? newest.date.slice(0, 7) : '');
+            setRangeStart(newest?.date || null);
+            setLoading(false);
+          }
+        }
+      } catch (e) {
+        // Ignore cache errors
+      }
+
+      // 2. Fetch fresh data
       try {
         const r = await api.get('/api/history');
         if (active) {
           const fresh = r.data;
-          setAllEntries(fresh.entries || []);
-          const newest = fresh.entries?.[0];
-          setActiveMonth(newest ? newest.date.slice(0, 7) : '');
-          setRangeStart(newest?.date || null);
+          const isFreshEmpty = !fresh.entries || fresh.entries.length === 0;
+          const hasValidCache = currentCache?.entries?.length > 0;
+
+          if (!fresh.fallback && !(isFreshEmpty && hasValidCache)) {
+            setAllEntries(fresh.entries || []);
+            const newest = fresh.entries?.[0];
+            setActiveMonth(newest ? newest.date.slice(0, 7) : '');
+            setRangeStart(newest?.date || null);
+            localStorage.setItem(cacheKey, JSON.stringify(fresh));
+          }
           setLoading(false);
         }
       } catch {
-        if (active) { setAllEntries([]); setLoading(false); }
+        if (active && loading) { setAllEntries([]); setLoading(false); }
       }
     }
     load();

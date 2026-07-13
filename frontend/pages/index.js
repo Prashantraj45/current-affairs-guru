@@ -16,12 +16,15 @@ export default function DashboardPage() {
   useEffect(() => {
     let active = true;
     async function load() {
+      let currentCache = null;
+      
       // 1. Serve from frontend cache immediately
       try {
         const cachedStr = localStorage.getItem('cag_dashboard_cache');
         if (cachedStr) {
           const cachedData = JSON.parse(cachedStr);
           if (active && cachedData) {
+            currentCache = cachedData;
             setPayload(cachedData);
             setLoading(false);
           }
@@ -34,10 +37,16 @@ export default function DashboardPage() {
       try {
         const response = await api.get('/api/today');
         if (active) {
-          // If the proxy returns a fallback (cold start timeout), don't overwrite good cache with empty data
-          if (!response.data.fallback) {
-            setPayload(response.data);
-            localStorage.setItem('cag_dashboard_cache', JSON.stringify(response.data));
+          const fresh = response.data;
+          
+          // Don't overwrite if proxy returned a timeout fallback
+          // ALSO don't overwrite if fresh data is completely empty but we have older valid cache
+          const isFreshEmpty = !fresh.topics || fresh.topics.length === 0;
+          const hasValidCache = currentCache?.topics?.length > 0;
+          
+          if (!fresh.fallback && !(isFreshEmpty && hasValidCache)) {
+            setPayload(fresh);
+            localStorage.setItem('cag_dashboard_cache', JSON.stringify(fresh));
           }
           setLoading(false);
         }
