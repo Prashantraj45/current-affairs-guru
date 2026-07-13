@@ -16,14 +16,35 @@ export default function DashboardPage() {
   useEffect(() => {
     let active = true;
     async function load() {
+      // 1. Serve from frontend cache immediately
       try {
-        // Stale-while-revalidate is handled server-side by the KV proxy.
-        // The proxy returns cached KV data immediately and refreshes in the background.
+        const cachedStr = localStorage.getItem('cag_dashboard_cache');
+        if (cachedStr) {
+          const cachedData = JSON.parse(cachedStr);
+          if (active && cachedData) {
+            setPayload(cachedData);
+            setLoading(false);
+          }
+        }
+      } catch (e) {
+        // Ignore localStorage errors
+      }
+
+      // 2. Fetch fresh data to revalidate and update cache
+      try {
         const response = await api.get('/api/today');
-        if (active) { setPayload(response.data); setLoading(false); }
+        if (active) {
+          // If the proxy returns a fallback (cold start timeout), don't overwrite good cache with empty data
+          if (!response.data.fallback) {
+            setPayload(response.data);
+            localStorage.setItem('cag_dashboard_cache', JSON.stringify(response.data));
+          }
+          setLoading(false);
+        }
       } catch (e) {
         if (active) {
-          setError(e?.response?.data?.error || e?.message || 'Could not load dashboard.');
+          // Only show error if we don't already have payload from cache
+          setError(prev => prev || e?.response?.data?.error || e?.message || 'Could not load dashboard.');
           setLoading(false);
         }
       }
