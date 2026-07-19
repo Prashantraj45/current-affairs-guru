@@ -5,7 +5,7 @@
 - Node.js 18+
 - MongoDB Atlas account (free tier works)
 - DeepSeek API key
-- Firebase project (for Google auth)
+- Firebase project (for Google auth on web)
 - Cloudflare account with a KV namespace (optional — caching skipped if vars absent)
 
 ---
@@ -38,6 +38,13 @@ CORS_ORIGIN=http://localhost:3001
 # Scheduler (set false to disable cron on local)
 SCHEDULER_ENABLED=false
 JOB_TIME=05:00
+
+# Mobile auth (Google Sign-In token verification)
+GOOGLE_CLIENT_ID=your-google-oauth-client-id
+
+# JWT secrets (generate two separate random hex strings)
+JWT_ACCESS_SECRET=your-64-char-access-secret
+JWT_REFRESH_SECRET=your-64-char-refresh-secret
 ```
 
 ### 3. Start
@@ -52,7 +59,7 @@ API runs on `http://localhost:3000`.
 
 ---
 
-## Frontend
+## Frontend (Web)
 
 ### 1. Install dependencies
 
@@ -98,20 +105,90 @@ Frontend runs on `http://localhost:3001`.
 
 ---
 
+## Mobile App (Android)
+
+The mobile app is a React Native (Expo-managed) Android app in `mobile/`. It uses native builds only — **Expo Go is not supported** due to native modules (Google Sign-In, MMKV, Reanimated).
+
+### Prerequisites
+
+- Node.js 18+
+- Android Studio with Android SDK and an emulator (API 34+) or physical Android device with USB debugging enabled
+- Java (bundled with Android Studio at `/Applications/Android Studio.app/Contents/jbr`)
+
+Ensure `~/.zshrc` (or `~/.bashrc`) contains:
+
+```bash
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+```
+
+### 1. Install dependencies
+
+```bash
+cd mobile && npm install --legacy-peer-deps
+```
+
+### 2. Create `mobile/.env`
+
+```env
+# Backend API URL — use your machine's LAN IP (not localhost) so the emulator/device can reach it
+API_URL=http://192.168.x.x:3001
+
+# Google OAuth Web Client ID (Web application type from Google Cloud Console)
+GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
+```
+
+> Get your LAN IP: `ipconfig getifaddr en0`
+
+### 3. Configure Google Sign-In
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com) → APIs & Services → Credentials
+2. Create an **Android** OAuth 2.0 Client ID:
+   - Package name: `com.civil.currentaffairsguru`
+   - SHA-1: run `cd mobile/android && ./gradlew signingReport` and copy the debug SHA-1
+3. Create a **Web application** OAuth 2.0 Client ID (no redirect URIs needed)
+4. Put the **Web application** client ID in `mobile/.env` as `GOOGLE_WEB_CLIENT_ID`
+
+### 4. Create `mobile/android/local.properties`
+
+```
+sdk.dir=/Users/<your-username>/Library/Android/sdk
+```
+
+### 5. Build and run (native debug build)
+
+```bash
+cd mobile
+npx expo run:android
+```
+
+First build takes 5–10 minutes (Gradle). Subsequent runs are faster via Metro hot-reload.
+
+### 6. Build a release APK
+
+```bash
+cd mobile
+eas build --profile preview --platform android --local
+```
+
+---
+
 ## Running the daily job locally
 
 ```bash
 npm run job
 ```
 
-This fetches news for yesterday (UTC), runs the AI pipeline, and saves to MongoDB. Takes 2–5 minutes depending on network.
+Fetches news for yesterday (UTC), runs the AI pipeline, saves to MongoDB. Takes 2–5 minutes.
 
 ---
 
 ## Security
 
-- Never commit `.env` or `frontend/.env.local` — both are in `.gitignore`
-- `ADMIN_SECRET` is used only via `x-admin-key` header; never expose it on the frontend
+- Never commit `.env`, `frontend/.env.local`, `mobile/.env`, or `mobile/service-account.json` — all are in `.gitignore`
+- `ADMIN_SECRET` is used only via `x-admin-key` header; never expose on the frontend
+- `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` must be long random secrets — never reuse between environments
 - Before every push: `git check-ignore .env` should output `.env`
 - To scan history for leaked secrets: `git rev-list --all | xargs git show | grep -E "sk-|mongodb\+srv"`
 
@@ -127,3 +204,7 @@ This fetches news for yesterday (UTC), runs the AI pipeline, and saves to MongoD
 | Puppeteer Chrome not found (local) | Set `PUPPETEER_EXECUTABLE_PATH` or let Puppeteer download on first run |
 | Frontend shows no data | Run `npm run job` first to populate MongoDB |
 | CORS error | Check `CORS_ORIGIN` matches your frontend URL |
+| Mobile can't reach backend | Use machine LAN IP (not `localhost`) in `mobile/.env` `API_URL` |
+| Google Sign-In DEVELOPER_ERROR | Ensure Android OAuth client exists in GCP with correct package name + SHA-1; `GOOGLE_WEB_CLIENT_ID` must be Web application type, not Android |
+| `GOOGLE_CLIENT_ID not configured` | Add to backend `.env` — required for mobile JWT auth |
+| Expo Go incompatible | App uses native modules — must use `npx expo run:android`, not Expo Go |

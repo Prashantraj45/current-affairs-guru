@@ -77,7 +77,13 @@ class SecretManager {
     this.secrets.JOB_TIME = process.env.JOB_TIME || '05:00';
     this.secrets.CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3001';
     this.secrets.LOG_LEVEL = process.env.LOG_LEVEL || 'info';
-    this.secrets.GOOGLE_CLIENT_ID= process.env.GOOGLE_CLIENT_ID || 'abcd';
+    this.secrets.GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+    this.secrets.JWT_SECRET = process.env.JWT_SECRET || '';
+    this.secrets.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || '';
+    this.secrets.DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
+    this.secrets.CF_ACCOUNT_ID = process.env.CF_ACCOUNT_ID || '';
+    this.secrets.CF_KV_NAMESPACE_ID = process.env.CF_KV_NAMESPACE_ID || '';
+    this.secrets.CF_KV_API_TOKEN = process.env.CF_KV_API_TOKEN || '';
     console.log('✓ All secrets validated successfully');
   }
 

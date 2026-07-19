@@ -7,15 +7,15 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "splash": { "image": "./assets/splash.png", "resizeMode": "contain", "backgroundColor": "#1a1a2e" },
+    "splash": { "image": "./assets/splash-icon.png", "resizeMode": "contain", "backgroundColor": "#1a1a2e" },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cag.currentaffairsguru",
       "infoPlist": { "NSUserNotificationUsageDescription": "We send daily current affairs updates." }
     },
     "android": {
-      "package": "com.cag.currentaffairsguru",
-      "adaptiveIcon": { "foregroundImage": "./assets/adaptive-icon.png", "backgroundColor": "#1a1a2e" },
+      "package": "com.civil.currentaffairsguru",
+      "adaptiveIcon": { "foregroundImage": "./assets/android-icon-foreground.png", "backgroundImage": "./assets/android-icon-background.png" },
       "permissions": ["RECEIVE_BOOT_COMPLETED", "VIBRATE"]
     },
     "plugins": [

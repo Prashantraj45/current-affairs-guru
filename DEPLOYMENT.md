@@ -1,6 +1,6 @@
 # Production Deployment
 
-Three independently deployed services: backend (Render), frontend (Vercel), scheduler (Azure Functions).
+Four independently deployed services: backend (Render), frontend (Vercel), scheduler (Azure Functions), mobile app (Google Play Store via EAS).
 
 ---
 
@@ -22,6 +22,11 @@ NODE_ENV=production
 CORS_ORIGIN=https://your-vercel-domain.vercel.app
 SCHEDULER_ENABLED=false          # scheduler runs via Azure Functions, not here
 PUPPETEER_EXECUTABLE_PATH=       # Render sets this automatically for Puppeteer buildpack
+
+# Mobile auth
+GOOGLE_CLIENT_ID=                # Android OAuth 2.0 client ID from Google Cloud Console
+JWT_ACCESS_SECRET=               # 64-char random hex
+JWT_REFRESH_SECRET=              # 64-char random hex (different from access secret)
 ```
 
 ### Puppeteer on Render
@@ -124,10 +129,62 @@ curl -X POST https://your-backend.onrender.com/api/admin/release-lock \
 
 ---
 
+## Mobile App — Google Play Store (EAS)
+
+The Android app is built and submitted via [Expo Application Services (EAS)](https://expo.dev/eas).
+
+### Prerequisites
+
+- EAS account: `eas login`
+- Google Play Developer account ($25 one-time fee)
+- `mobile/service-account.json` — service account key from Google Play Console with **Release Manager** role (do not commit)
+
+### Build
+
+```bash
+cd mobile
+
+# Development build (internal distribution, includes dev client)
+eas build --profile development --platform android
+
+# Preview APK (sideloadable, no Play Store required)
+eas build --profile preview --platform android
+
+# Production AAB (Play Store release)
+eas build --profile production --platform android
+```
+
+### Submit to Play Store
+
+```bash
+cd mobile
+eas submit --platform android --profile production
+```
+
+`eas.json` is configured to submit to the **internal** track. Promote to production in the Play Console after internal testing.
+
+### EAS project ID
+
+Update `mobile/app.json` → `extra.eas.projectId` with your actual EAS project ID:
+
+```bash
+cd mobile && eas init
+```
+
+### CI/CD
+
+`.github/workflows/mobile.yml` runs EAS builds on push to `main`. Set these GitHub Actions secrets:
+
+| Secret | Value |
+|---|---|
+| `EXPO_TOKEN` | EAS personal access token |
+
+---
+
 ## CI/CD
 
 GitHub Actions workflow (`.github/workflows/`) handles:
-- On push to `main`: deploy to Azure Function App
+- On push to `main`: deploy to Azure Function App + trigger EAS Android build
 
 Backend (Render) and frontend (Vercel) auto-deploy from their own GitHub integrations.
 
@@ -148,4 +205,10 @@ curl https://your-vercel-domain.vercel.app/api/proxy/api/today | jq '.topics | l
 # Admin status
 curl https://your-backend.onrender.com/api/admin/status \
   -H "x-admin-key: YOUR_ADMIN_SECRET"
+
+# Mobile auth endpoint (verifies Google client ID is configured)
+curl -X POST https://your-backend.onrender.com/api/auth/google \
+  -H "Content-Type: application/json" \
+  -d '{"idToken":"invalid"}' \
+  # expects 401 {"error":"Invalid Google ID token"} — confirms route is live
 ```

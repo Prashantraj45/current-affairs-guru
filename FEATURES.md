@@ -1,6 +1,6 @@
 # Features & API Reference
 
-## Frontend Pages
+## Web Frontend Pages
 
 | Route | Description |
 |---|---|
@@ -15,6 +15,36 @@
 | `/login` | Google OAuth sign-in |
 
 All pages are auth-gated (Google OAuth via Firebase). Set `NEXT_PUBLIC_DISABLE_OAUTH_LOCAL=true` to bypass locally.
+
+Topic cards and detail pages display source attribution as amber pills (e.g. "Drishti IAS - News Analysis", "PIB - Ministry of Finance"). History, home, and topic pages use client-side caching for faster navigation.
+
+---
+
+## Mobile App (Android)
+
+Expo + React Native app (`mobile/`) targeting Android, distributed via Google Play Store.
+
+### Screens
+
+| Screen | Description |
+|---|---|
+| Welcome / Login | Google Sign-In; receives JWT from backend |
+| Feed (Home tab) | Today's topics via FlashList, pull-to-refresh, auto read-tracking |
+| Topic Detail | Full topic data — key points, prelims facts, MCQ, mains framework, sources |
+| History | Paginated reading history, client-side search |
+| Search | Full-text search across cached topic data |
+| Bookmarks | Saved topics with optimistic UI updates |
+| MCQ Practice | Answer selection with reveal and colour-coded feedback |
+| Insights | Daily signal deck — trends, strategy, exam focus areas |
+| Settings | Theme toggle (light/dark), logout |
+
+### Architecture
+
+- **State**: Zustand stores — auth (in-memory), theme + offline cache tracker (MMKV-persisted)
+- **Data fetching**: TanStack Query with MMKV-backed query persistence (offline reads work after first load)
+- **Tokens**: JWT access + refresh stored in `expo-secure-store`; silent refresh interceptor on Axios client
+- **Navigation**: React Navigation — Root → Auth stack / Tab stack (Feed, History, Search, Bookmarks, Insights) + feature stacks
+- **Notifications**: `expo-notifications` + FCM push token registered to backend on login
 
 ---
 
@@ -35,6 +65,30 @@ Frontend proxy base: `https://your-vercel-domain.vercel.app/api/proxy`
 | GET | `/api/insights/monthly` | List of monthly insight reports |
 | GET | `/api/insights/monthly/:month` | Specific monthly report (`YYYY-MM`) |
 | GET | `/api/topic/:id` | Single topic by ID |
+
+### Auth (mobile JWT — no Firebase required)
+
+| Method | Path | Body | Description |
+|---|---|---|---|
+| POST | `/api/auth/google` | `{ idToken }` | Verify Google ID token → issue JWT pair |
+| POST | `/api/auth/apple` | `{ identityToken, fullName?, email? }` | Verify Apple identity token → issue JWT pair |
+| POST | `/api/auth/refresh` | `{ refreshToken }` | Rotate refresh token → new JWT pair |
+| POST | `/api/auth/logout` | `{ refreshToken }` | Invalidate refresh token |
+
+JWT access tokens expire in 15 minutes; refresh tokens in 30 days. Pass access token as `Authorization: Bearer <token>` on protected routes.
+
+### User (requires `Authorization: Bearer <accessToken>`)
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/user/me` | Current user profile |
+| GET | `/api/user/bookmarks` | All bookmarked topic IDs with dates |
+| POST | `/api/user/bookmarks/:topicId` | Bookmark a topic (`{ date: "YYYY-MM-DD" }`) |
+| DELETE | `/api/user/bookmarks/:topicId` | Remove a bookmark |
+| GET | `/api/user/history` | Reading history, paginated (`?page=1&limit=20`) |
+| POST | `/api/user/history` | Record a topic read (`{ topicId, date }`) |
+| POST | `/api/user/push-token` | Register an Expo push token (`{ token }`) |
+| DELETE | `/api/user/push-token` | Unregister a push token (`{ token }`) |
 
 ### Admin (requires `x-admin-key: YOUR_ADMIN_SECRET` header)
 
@@ -127,6 +181,27 @@ Frontend proxy base: `https://your-vercel-domain.vercel.app/api/proxy`
   "topic": "related-topic-id"
 }
 ```
+
+### User
+
+```json
+{
+  "uid": "google-sub-or-apple-sub",
+  "provider": "google",
+  "email": "user@example.com",
+  "displayName": "Prashant Raj",
+  "photoUrl": "https://...",
+  "bookmarks": [
+    { "topicId": "india-china-border-talks", "date": "2026-07-18", "savedAt": "2026-07-18T..." }
+  ],
+  "readingHistory": [
+    { "topicId": "india-china-border-talks", "date": "2026-07-18", "readAt": "2026-07-18T..." }
+  ],
+  "pushTokens": ["ExponentPushToken[xxxxxx]"]
+}
+```
+
+`readingHistory` is capped at the latest 500 entries. `pushTokens` uses `$addToSet` so duplicate tokens are ignored.
 
 ### Signal Deck (Insights)
 
