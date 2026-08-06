@@ -20,6 +20,7 @@ import { releaseLock, forceUnlock } from '../models/Lock.js';
 import { callCaseStudies } from '../claude/providers/deepseek.js';
 import authRoutes from './authRoutes.js';
 import userRoutes from './userRoutes.js';
+import { apiCache } from './cacheMiddleware.js';
 config({ override: true });
 
 const app = express();
@@ -154,6 +155,9 @@ function verifyAdminKey(req, res, next) {
 // Auth + User routes
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
+
+// Apply API cache
+app.use('/api', apiCache);
 
 // Health check
 app.get('/health', (req, res) => {
