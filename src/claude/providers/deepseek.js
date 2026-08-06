@@ -13,7 +13,7 @@ function extractJson(text) {
   // 1. Remove markdown code blocks
   cleaned = cleaned.replace(/```json/gi, '').replace(/```/g, '');
   
-  // 2. Fix bullet points outside strings (e.g., • "Text" -> "Text")
+  // 2. Fix bullet points outside strings
   cleaned = cleaned.replace(/^[ \t]*[•\-]\s*"/gm, '"');
   
   try { return JSON.parse(cleaned); } catch {}
@@ -23,28 +23,34 @@ function extractJson(text) {
     let jsonStr = match[0];
     try { return JSON.parse(jsonStr); } catch {}
     
-    // 3. Fallback: Fix unescaped control characters in string literals
-    jsonStr = jsonStr.replace(/[\n\r\t]+/g, ' ');
-    jsonStr = jsonStr.replace(/[\u0000-\u001F]+/g, '');
+    // 3. Try jsonrepair directly on the untouched matched string first
+    try { return JSON.parse(jsonrepair(jsonStr)); } catch {}
+
+    // 4. Fallback: Fix unescaped control characters in string literals
+    let fallbackStr = jsonStr.replace(/[\n\r\t]+/g, ' ');
+    fallbackStr = fallbackStr.replace(/[\u0000-\u001F]+/g, '');
     
-    try { return JSON.parse(jsonStr); } catch {}
+    try { return JSON.parse(fallbackStr); } catch {}
     
-    // 4. jsonrepair fallback for unescaped quotes, missing commas, etc.
+    // 5. Final jsonrepair fallback on the stripped string
     try {
-      const repaired = jsonrepair(jsonStr);
+      const repaired = jsonrepair(fallbackStr);
       return JSON.parse(repaired);
     } catch (err) {
-      throw new Error(`JSON Parse Error: ${err.message}`);
+      console.warn(`[JSON Extraction] Severe LLM corruption. Failed to repair: ${err.message}`);
+      return null; // Return null instead of throwing to prevent crashing the batch
     }
   }
-  throw new Error('No valid JSON found in response');
+  
+  console.warn('[JSON Extraction] No valid JSON brackets found in response');
+  return null;
 }
 
 // ─── Pass 1: Topic Extraction (deepseek-chat) ─────────────────────────────────
 // Called per batch of ~8 news items. Extract ALL unique UPSC-relevant topics.
 
 const TOPIC_SYSTEM = `You are a UPSC current affairs analyst. Extract all unique, exam-relevant topics from the news batch provided.
-Return ONLY a JSON array of topic objects. No markdown, no prose outside JSON.
+Return ONLY a JSON object containing a "topics" array. No markdown, no prose outside JSON.
 
 RULES:
 - Extract EVERY unique UPSC-relevant topic — do not limit count
@@ -54,42 +60,47 @@ RULES:
 - Each topic must have all required fields
 - "sources": copy the exact "src" string(s) from whichever input news items contributed to this topic (1-3 max)
 
-TOPIC SCHEMA (return array of these):
+TOPIC SCHEMA (return this exact JSON object):
 {
-  "id": "kebab-case-slug",
-  "type": "topic|case-study|fact-sheet",
-  "title": "Sharp scannable title",
-  "category": "Environment|Polity|Economy|IR|Science|Reports|Governance|Ethics",
-  "importance": "HIGH|MEDIUM|LOW",
-  "score": 0-100,
-  "summary": "2 sentences: what happened + why it matters for UPSC",
-  "why_in_news": "Single trigger event sentence",
-  "keyPoints": ["• point ≤15 words", "• point ≤15 words"],
-  "backgroundContext": ["• historical/constitutional/policy backdrop", "• second point"],
-  "editorialInsights": ["• critical analysis or debate angle", "• second point"],
-  "interlinkages": ["• link to other GS area or related event", "• second point"],
-  "explanation": "• point1\n• point2\n• point3\n• point4",
-  "facts": ["static fact1", "static fact2"],
-  "tags": ["GS-X", "syllabus-area", "keyword"],
-  "prelims": {
-    "key_facts": ["fact1", "fact2", "fact3"],
-    "mcq": {"question": "...", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "answer": "A"}
-  },
-  "mains": {
-    "gs_paper": "GS-1|GS-2|GS-3|GS-4",
-    "question": "Exam-style analytical question ≥15 words",
-    "answer_framework": {"intro": "1 sentence", "body": ["pt1 ≥10 words", "pt2 ≥10 words", "pt3 ≥10 words"], "conclusion": "1 sentence"}
-  },
-  "revision_note": "Compact ≤50 word summary for revision",
-  "sources": ["copy src field values from whichever input news items this topic draws from"]
+  "topics": [
+    {
+      "id": "kebab-case-slug",
+      "type": "topic|case-study|fact-sheet",
+      "title": "Sharp scannable title",
+      "category": "Environment|Polity|Economy|IR|Science|Reports|Governance|Ethics",
+      "importance": "HIGH|MEDIUM|LOW",
+      "score": 0-100,
+      "summary": "2 sentences: what happened + why it matters for UPSC",
+      "why_in_news": "Single trigger event sentence",
+      "keyPoints": ["• point ≤15 words", "• point ≤15 words"],
+      "backgroundContext": ["• historical/constitutional/policy backdrop", "• second point"],
+      "editorialInsights": ["• critical analysis or debate angle", "• second point"],
+      "interlinkages": ["• link to other GS area or related event", "• second point"],
+      "explanation": "• point1\\n• point2\\n• point3\\n• point4",
+      "facts": ["static fact1", "static fact2"],
+      "tags": ["GS-X", "syllabus-area", "keyword"],
+      "prelims": {
+        "key_facts": ["fact1", "fact2", "fact3"],
+        "mcq": {"question": "...", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "answer": "A"}
+      },
+      "mains": {
+        "gs_paper": "GS-1|GS-2|GS-3|GS-4",
+        "question": "Exam-style analytical question ≥15 words",
+        "answer_framework": {"intro": "1 sentence", "body": ["pt1 ≥10 words", "pt2 ≥10 words", "pt3 ≥10 words"], "conclusion": "1 sentence"}
+      },
+      "revision_note": "Compact ≤50 word summary for revision",
+      "sources": ["copy src field values from whichever input news items this topic draws from"]
+    }
+  ]
 }`;
 
 export async function callBatchTopics(newsBatch) {
   const client = getClient();
-  const userPrompt = `Extract all UPSC-relevant topics from these news items. Return a JSON array.\n\nNEWS:\n${JSON.stringify(newsBatch)}`;
+  const userPrompt = `Extract all UPSC-relevant topics from these news items. Return a JSON object with a "topics" array.\n\nNEWS:\n${JSON.stringify(newsBatch)}`;
 
   const response = await client.chat.completions.create({
     model: 'deepseek-chat',
+    response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: TOPIC_SYSTEM },
       { role: 'user', content: userPrompt },
@@ -101,7 +112,8 @@ export async function callBatchTopics(newsBatch) {
   if (!raw) throw new Error('Empty response from DeepSeek (topics batch)');
 
   const parsed = extractJson(raw);
-  return Array.isArray(parsed) ? parsed : (parsed.topics || []);
+  // With json_object, parsed will be an object { topics: [...] }
+  return Array.isArray(parsed) ? parsed : (parsed?.topics || []);
 }
 
 // ─── Pass 2: Case Studies (deepseek-reasoner) ─────────────────────────────────
@@ -160,6 +172,7 @@ export async function callCaseStudies(topics) {
   if (!raw) throw new Error('Empty response from DeepSeek (case studies)');
 
   const parsed = extractJson(raw);
+  if (!parsed) return []; // Fallback to empty array on corruption
   return Array.isArray(parsed) ? parsed : (parsed.caseStudies || []);
 }
 
@@ -187,6 +200,7 @@ export async function callInsights(topics) {
 
   const response = await client.chat.completions.create({
     model: 'deepseek-chat',
+    response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: INSIGHTS_SYSTEM },
       { role: 'user', content: userPrompt },
@@ -197,32 +211,37 @@ export async function callInsights(topics) {
   const raw = response.choices?.[0]?.message?.content || '';
   if (!raw) throw new Error('Empty response from DeepSeek (insights)');
 
-  return extractJson(raw);
+  return extractJson(raw) || {}; // Fallback to empty object on corruption
 }
 
 // ─── Pass 1 MCQs (deepseek-chat) ─────────────────────────────────────────────
 // Separate small call — generate standalone MCQs from final topic list.
 
 const MCQ_SYSTEM = `You are a UPSC prelims question setter. Generate standalone practice MCQs from today's current affairs topics.
-Return ONLY a JSON array of MCQ objects. No markdown.
+Return ONLY a JSON object containing an "mcqs" array. No markdown.
 
-MCQ SCHEMA:
+MCQ SCHEMA (return this object):
 {
-  "question": "Complete question ≥15 words",
-  "options": ["A. option", "B. option", "C. option", "D. option"],
-  "answer": "A|B|C|D",
-  "explanation": "1-2 sentence explanation of why the answer is correct",
-  "topic": "related-topic-id-or-title"
+  "mcqs": [
+    {
+      "question": "Complete question ≥15 words",
+      "options": ["A. option", "B. option", "C. option", "D. option"],
+      "answer": "A|B|C|D",
+      "explanation": "1-2 sentence explanation of why the answer is correct",
+      "topic": "related-topic-id-or-title"
+    }
+  ]
 }`;
 
 export async function callMCQs(topics) {
   const client = getClient();
 
   const topicList = topics.map((t) => `${t.title}: ${t.summary}`).join('\n');
-  const userPrompt = `Generate 8-12 UPSC prelims MCQs from today's topics. Return a JSON array.\n\nTOPICS:\n${topicList}`;
+  const userPrompt = `Generate 8-12 UPSC prelims MCQs from today's topics. Return a JSON object with an "mcqs" array.\n\nTOPICS:\n${topicList}`;
 
   const response = await client.chat.completions.create({
     model: 'deepseek-chat',
+    response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: MCQ_SYSTEM },
       { role: 'user', content: userPrompt },
@@ -233,12 +252,8 @@ export async function callMCQs(topics) {
   const raw = response.choices?.[0]?.message?.content || '';
   if (!raw) return [];
 
-  try {
-    const parsed = extractJson(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  const parsed = extractJson(raw);
+  return Array.isArray(parsed) ? parsed : (parsed?.mcqs || []);
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
