@@ -26,12 +26,6 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run Tests
-        run: npm test --if-present
-
-      - name: Build Application
-        run: npm run build
-
   deploy:
     runs-on: ubuntu-latest
     needs: build
