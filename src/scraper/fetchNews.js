@@ -215,64 +215,54 @@ async function fetchCASites(maxPerSite = 15, dateParts) {
 
 // ─── Puppeteer: Vision IAS Subject Pages ─────────────────────────────────────
 
-// Subject IDs 1–15 on Vision IAS cover the full UPSC syllabus range
-const VISION_SUBJECT_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+// 8 subjects covering core UPSC syllabus — trimmed from 15 to cut sequential scrape time
+// and peak RAM (fewer navigations = less DOM garbage accumulation in the single tab).
+const VISION_SUBJECT_IDS = [1, 2, 3, 4, 5, 6, 7, 8];
 const VISION_SUBJECT_URL = (id) =>
   `https://visionias.in/current-affairs/search?subject=${id}&sort=recent&query=&type=articles&initiative=&time=any`;
 
+// Navigates the shared page to one subject URL and extracts article cards.
+// Interception is set up once by the caller (fetchVisionSubjects) — not here,
+// so adding the listener multiple times on a reused page is avoided.
 async function scrapeVisionSubjectPage(page, subjectId) {
   const url = VISION_SUBJECT_URL(subjectId);
   try {
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
-
-    // Wait for article cards to render
-    await page.waitForSelector('article, .article-card, .ca-card, [class*="article"], [class*="card"]', { timeout: 8000 }).catch(() => {});
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    // Short pause so the JS framework can render article cards into the DOM
+    await new Promise((r) => setTimeout(r, 2500));
+    await page.waitForSelector(
+      'article, .article-card, .ca-card, [class*="article"], [class*="card"]',
+      { timeout: 6000 }
+    ).catch(() => {});
 
     const items = await page.evaluate((subjectId) => {
       const results = [];
-
-      // Try multiple selector patterns Vision IAS might use
       const cards = [
         ...document.querySelectorAll('article'),
         ...document.querySelectorAll('[class*="article-card"]'),
         ...document.querySelectorAll('[class*="ca-card"]'),
         ...document.querySelectorAll('[class*="ArticleCard"]'),
         ...document.querySelectorAll('[class*="news-card"]'),
-        // Vision IAS new DOM structure: they use an <a> tag directly as the card, usually with a date in the URL
-        ...document.querySelectorAll('a[href*="/202"][class*="block"]')
+        ...document.querySelectorAll('a[href*="/202"][class*="block"]'),
       ];
-
-      // Deduplicate DOM nodes
       const seen = new Set();
       const unique = cards.filter((el) => {
         if (seen.has(el)) return false;
         seen.add(el);
         return true;
       });
-
       for (const card of unique.slice(0, 8)) {
-        // Extract title — try heading tags first
-        const titleEl = card.querySelector('h1,h2,h3,h4') || (card.tagName.toLowerCase() === 'a' ? card : card.querySelector('a[href*="current-affairs"]'));
-        let title = titleEl?.innerText?.trim() || '';
-        // Often titles have random prefixes or they are too short
+        const titleEl = card.querySelector('h1,h2,h3,h4') ||
+          (card.tagName.toLowerCase() === 'a' ? card : card.querySelector('a[href*="current-affairs"]'));
+        const title = titleEl?.innerText?.trim() || '';
         if (!title || title.length < 10) continue;
-
-        // Extract summary from paragraph or description element
         const summaryEl = card.querySelector('p, [class*="description"], [class*="summary"], [class*="excerpt"]');
         const summary = summaryEl?.innerText?.trim()?.substring(0, 400) || '';
-
-        // Extract URL
-        const url = card.tagName.toLowerCase() === 'a' ? card.href : (card.querySelector('a[href]')?.href || '');
-
-        results.push({
-          title,
-          summary,
-          url,
-          source: `Vision IAS - Subject ${subjectId}`,
-          pubDate: new Date().toISOString(),
-        });
+        const url = card.tagName.toLowerCase() === 'a'
+          ? card.href
+          : (card.querySelector('a[href]')?.href || '');
+        results.push({ title, summary, url, source: `Vision IAS - Subject ${subjectId}`, pubDate: new Date().toISOString() });
       }
-
       return results;
     }, subjectId);
 
@@ -289,79 +279,70 @@ async function fetchVisionSubjects() {
   let browser;
 
   try {
-    // executablePath: resolve against the same cache dir puppeteer.config.cjs uses,
-    // so Render finds Chrome inside the project directory at runtime.
     let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath();
-    
+
     if (executablePath && !fs.existsSync(executablePath)) {
-      // If default fails, manually scan the local EC2 .cache directory it just installed to
-      let localCachePath = undefined;
+      let localCachePath;
       try {
         const baseDir = '/home/ec2-user/current-affairs-guru/.cache/puppeteer/chrome';
         if (fs.existsSync(baseDir)) {
           const versions = fs.readdirSync(baseDir);
-          if (versions.length > 0) {
-            localCachePath = `${baseDir}/${versions[0]}/chrome-linux64/chrome`;
-          }
+          if (versions.length > 0) localCachePath = `${baseDir}/${versions[0]}/chrome-linux64/chrome`;
         }
-      } catch (e) {}
+      } catch {}
 
-      const fallbacks = [
-        localCachePath, // Try the explicitly downloaded EC2 path first
-        '/usr/bin/google-chrome',
-        '/usr/bin/google-chrome-stable',
-        '/usr/bin/chromium',
-        '/usr/bin/chromium-browser',
-        puppeteer.executablePath(),
-      ];
-      
       executablePath = undefined;
-      for (const p of fallbacks) {
-        if (p && fs.existsSync(p)) {
-          executablePath = p;
-          break;
-        }
+      for (const p of [localCachePath, '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser', puppeteer.executablePath()]) {
+        if (p && fs.existsSync(p)) { executablePath = p; break; }
       }
     }
 
     const launchOptions = {
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-extensions',
+        '--js-flags=--max-old-space-size=256', // cap V8 heap inside Chrome renderer
+      ],
     };
     if (executablePath) launchOptions.executablePath = executablePath;
 
     console.log(`[Puppeteer] Using Chrome at: ${executablePath || 'default'}`);
     browser = await puppeteer.launch(launchOptions);
 
-    // Run subjects in batches of 5 concurrently
-    const BATCH_SIZE = 5;
-    for (let i = 0; i < VISION_SUBJECT_IDS.length; i += BATCH_SIZE) {
-      const batch = VISION_SUBJECT_IDS.slice(i, i + BATCH_SIZE);
-      console.log(`[Puppeteer] Vision IAS subjects batch: ${batch.join(', ')}`);
+    // Single shared page navigated sequentially — 1 tab instead of N concurrent tabs.
+    // Peak RAM drops from ~600 MB (3 tabs × batches) to ~200 MB (browser + 1 tab).
+    const page = await browser.newPage();
+    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-      const batchResults = await Promise.allSettled(
-        batch.map(async (id) => {
-          const page = await browser.newPage();
-          await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-          try {
-            return await scrapeVisionSubjectPage(page, id);
-          } finally {
-            await page.close().catch(() => {});
-          }
-        })
-      );
-
-      for (const result of batchResults) {
-        if (result.status === 'fulfilled') all.push(...result.value);
+    // Set up request interception once on the shared page.
+    // Blocking images/stylesheets/fonts/media cuts per-page RAM and speeds up navigation.
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      if (['image', 'stylesheet', 'font', 'media', 'ping'].includes(req.resourceType())) {
+        req.abort();
+      } else {
+        req.continue();
       }
+    });
+
+    for (const id of VISION_SUBJECT_IDS) {
+      console.log(`[Puppeteer] Vision IAS subject ${id}/${VISION_SUBJECT_IDS.length}`);
+      const items = await scrapeVisionSubjectPage(page, id);
+      all.push(...items);
     }
+
+    await page.close().catch(() => {});
   } catch (err) {
     console.error('[Puppeteer] Browser error:', err.message);
   } finally {
     if (browser) await browser.close().catch(() => {});
   }
 
-  console.log(`[Puppeteer] Vision IAS subjects total: ${all.length} articles`);
+  console.log(`[Puppeteer] Vision IAS total: ${all.length} articles`);
   return all;
 }
 

@@ -141,21 +141,29 @@ export async function processNewsBatch(newsBatch, previousREADME = null) {
   }
 
   const batches = splitIntoBatches(newsBatch, 12);
-  console.log(`[AI] Pass 1 — ${batches.length} topic batches × deepseek-chat (parallel)`);
+  console.log(`[AI] Pass 1 — ${batches.length} topic batches × deepseek-chat (2 concurrent)`);
 
-  // ── Pass 1: Topic extraction (all batches in parallel) ──────────────────────
-  const batchResults = await Promise.allSettled(
-    batches.map(async (batch, i) => {
-      try {
-        const topics = await callBatchTopics(batch);
-        console.log(`  [Batch ${i + 1}/${batches.length}] ✓ ${topics.length} topics`);
-        return topics;
-      } catch (err) {
-        console.error(`  [Batch ${i + 1}/${batches.length}] ✗ ${err.message}`);
-        return [];
-      }
-    })
-  );
+  // ── Pass 1: Topic extraction (2 concurrent — all-parallel holds N large JSON
+  // responses in memory simultaneously; 2 at a time cuts that peak significantly) ──
+  const allTopicResults = [];
+  for (let i = 0; i < batches.length; i += 2) {
+    const window = batches.slice(i, i + 2);
+    const windowResults = await Promise.allSettled(
+      window.map(async (batch, j) => {
+        const idx = i + j;
+        try {
+          const topics = await callBatchTopics(batch);
+          console.log(`  [Batch ${idx + 1}/${batches.length}] ✓ ${topics.length} topics`);
+          return topics;
+        } catch (err) {
+          console.error(`  [Batch ${idx + 1}/${batches.length}] ✗ ${err.message}`);
+          return [];
+        }
+      })
+    );
+    allTopicResults.push(...windowResults);
+  }
+  const batchResults = allTopicResults;
 
   const allTopicBatches = batchResults.map((r) => (r.status === 'fulfilled' ? r.value : []));
   const topics = mergeTopics(allTopicBatches);

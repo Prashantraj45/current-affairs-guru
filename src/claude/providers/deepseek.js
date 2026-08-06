@@ -139,6 +139,58 @@ function extractJson(text) {
   return null;
 }
 
+// ─── Topic sanitizer ──────────────────────────────────────────────────────────
+// Runs AFTER JSON parsing. Guards against the "array swallows subsequent fields"
+// corruption: when jsonrepair leaves a [String] field unclosed, all following keys
+// ('editorialInsights', ':', [array], ...) end up as elements of that array,
+// causing Mongoose CastError on [String] schema fields.
+
+const STRING_ARRAY_FIELDS = ['keyPoints', 'backgroundContext', 'editorialInsights', 'interlinkages', 'facts', 'tags', 'sources'];
+
+// All known top-level keys on a topic object — used to detect a "leaked field name"
+// inside an array, which signals that the array swallowed subsequent fields.
+const TOPIC_KEYS = new Set([
+  'id', 'type', 'title', 'category', 'importance', 'score', 'summary',
+  'why_in_news', 'keyPoints', 'backgroundContext', 'editorialInsights',
+  'interlinkages', 'explanation', 'facts', 'tags', 'prelims', 'mains',
+  'revision_note', 'sources',
+]);
+
+function sanitizeTopic(topic) {
+  if (!topic || typeof topic !== 'object' || Array.isArray(topic)) return null;
+  if (!topic.title || typeof topic.title !== 'string') return null;
+
+  const t = { ...topic };
+
+  for (const field of STRING_ARRAY_FIELDS) {
+    if (!Array.isArray(t[field])) {
+      // Scalar where array expected — wrap in array or default to []
+      t[field] = t[field] ? [String(t[field]).trim()].filter(Boolean) : [];
+      continue;
+    }
+    const clean = [];
+    for (const item of t[field]) {
+      // Leaked field name signals the array has swallowed the rest of the topic —
+      // stop here; everything after is misclassified content.
+      if (typeof item === 'string' && TOPIC_KEYS.has(item)) break;
+      if (item === ':') break;
+      // Nested arrays/objects are never valid in a [String] field — skip
+      if (typeof item !== 'string') continue;
+      // Strip trailing \n<spaces>] that was supposed to be the array closing bracket
+      const stripped = item.replace(/\\?n\s*\]$/, '').trim();
+      if (stripped.length > 0) clean.push(stripped);
+    }
+    t[field] = clean;
+  }
+
+  // explanation: occasionally emitted as an array instead of a string
+  if (Array.isArray(t.explanation)) {
+    t.explanation = t.explanation.filter(s => typeof s === 'string').join(' ').trim();
+  }
+
+  return t;
+}
+
 // ─── Pass 1: Topic Extraction (deepseek-chat) ─────────────────────────────────
 // Called per batch of ~8 news items. Extract ALL unique UPSC-relevant topics.
 
@@ -206,7 +258,8 @@ export async function callBatchTopics(newsBatch) {
 
   const parsed = extractJson(raw);
   // With json_object, parsed will be an object { topics: [...] }
-  return Array.isArray(parsed) ? parsed : (parsed?.topics || []);
+  const raw_topics = Array.isArray(parsed) ? parsed : (parsed?.topics || []);
+  return raw_topics.map(sanitizeTopic).filter(Boolean);
 }
 
 // ─── Pass 2: Case Studies (deepseek-reasoner) ─────────────────────────────────

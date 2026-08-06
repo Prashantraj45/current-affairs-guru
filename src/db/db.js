@@ -78,16 +78,42 @@ function generateCards(topics = []) {
   }));
 }
 
+// Validate a single topic against known [String] fields before handing to Mongoose.
+// Returns true if the topic is safe to save, false if it should be dropped.
+function isTopicSafe(t) {
+  if (!t || typeof t !== 'object') return false;
+  const STRING_ARR = ['keyPoints', 'backgroundContext', 'editorialInsights', 'interlinkages', 'facts', 'tags'];
+  for (const field of STRING_ARR) {
+    if (!Array.isArray(t[field])) continue;
+    for (const item of t[field]) {
+      // Nested array or object inside a [String] field → Mongoose will reject the whole entry
+      if (typeof item !== 'string') return false;
+    }
+  }
+  return true;
+}
+
 export async function saveEntry(entry, date) {
   try {
     const targetDate = date || new Date(Date.now() - 86400000).toISOString().split('T')[0];
-    const topics = entry.topics || [];
-    const cards = entry.cards?.length ? entry.cards : generateCards(topics);
+
+    // Drop any topics that would cause a Mongoose CastError on [String] schema fields.
+    const allTopics = entry.topics || [];
+    const safeTopics = allTopics.filter((t) => {
+      const ok = isTopicSafe(t);
+      if (!ok) console.warn(`[saveEntry] Dropping corrupt topic "${t?.title}" — failed [String] field check`);
+      return ok;
+    });
+    if (safeTopics.length < allTopics.length) {
+      console.warn(`[saveEntry] Dropped ${allTopics.length - safeTopics.length}/${allTopics.length} corrupt topics`);
+    }
+
+    const cards = entry.cards?.length ? entry.cards : generateCards(safeTopics);
     const result = await Entry.findOneAndUpdate(
       { date: targetDate },
       {
         date: targetDate,
-        topics,
+        topics: safeTopics,
         cards,
         mcqs: entry.mcqs || [],
         caseStudies: entry.caseStudies || [],
