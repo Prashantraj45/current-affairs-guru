@@ -50,8 +50,14 @@ jobs:
             git fetch origin
             git reset --hard origin/main
 
+            echo "Cleaning up invalid Render environment variables..."
+            sed -i '/PUPPETEER_CACHE_DIR/d' .env || true
+
             echo "Installing dependencies..."
             npm ci
+
+            echo "Installing Puppeteer Chrome..."
+            npx puppeteer browsers install chrome
 
             echo "Restarting application..."
             pm2 reload js-backend || pm2 start src/api/server.js --name js-backend
