@@ -294,7 +294,20 @@ async function fetchVisionSubjects() {
     let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath();
     
     if (executablePath && !fs.existsSync(executablePath)) {
+      // If default fails, manually scan the local EC2 .cache directory it just installed to
+      let localCachePath = undefined;
+      try {
+        const baseDir = '/home/ec2-user/current-affairs-guru/.cache/puppeteer/chrome';
+        if (fs.existsSync(baseDir)) {
+          const versions = fs.readdirSync(baseDir);
+          if (versions.length > 0) {
+            localCachePath = `${baseDir}/${versions[0]}/chrome-linux64/chrome`;
+          }
+        }
+      } catch (e) {}
+
       const fallbacks = [
+        localCachePath, // Try the explicitly downloaded EC2 path first
         '/usr/bin/google-chrome',
         '/usr/bin/google-chrome-stable',
         '/usr/bin/chromium',
