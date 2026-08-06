@@ -29,36 +29,10 @@ export default function TopicDetailPage() {
     let active = true;
     async function load() {
       const path = date ? `/api/topic/${id}?date=${date}` : `/api/topic/${id}`;
-      const cacheKey = `cag_topic_${id}_${date || 'latest'}`;
-      let currentCache = null;
-
-      // 1. Serve from frontend cache immediately
-      try {
-        const cachedStr = localStorage.getItem(cacheKey);
-        if (cachedStr) {
-          const cachedData = JSON.parse(cachedStr);
-          if (active && cachedData) {
-            currentCache = cachedData;
-            setTopic(cachedData);
-            setLoading(false);
-          }
-        }
-      } catch (e) {
-        // Ignore cache errors
-      }
-
-      // 2. Fetch fresh data
       try {
         const response = await api.get(path);
         if (active) {
-          const fresh = response.data;
-          const isFreshEmpty = !fresh || Object.keys(fresh).length === 0 || fresh.error;
-          const hasValidCache = currentCache !== null;
-
-          if (!fresh.fallback && !(isFreshEmpty && hasValidCache)) {
-            setTopic(fresh);
-            localStorage.setItem(cacheKey, JSON.stringify(fresh));
-          }
+          setTopic(response.data);
         }
       } catch (e) {
         if (active && loading) setError(e?.response?.data?.error || e?.message || 'Failed to load topic.');
