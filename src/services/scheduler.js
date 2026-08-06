@@ -4,6 +4,7 @@ import { processNewsBatch } from '../claude/runAI.js';
 import { saveEntry, readREADME, writeREADME, entryExists } from '../db/db.js';
 import { acquireLock, releaseLock, isLocked, getLockStatus } from '../models/Lock.js';
 import { sendDailyPushNotifications } from './pushNotifications.js';
+import { clearCache } from '../api/cacheMiddleware.js';
 
 let scheduledJob = null;
 const JOB_NAME = 'daily_intelligence';
@@ -132,7 +133,12 @@ export async function runDailyJob(targetDate, { force = false } = {}) {
     await sendDailyPushNotifications({ date: jobDate, topicCount: entry.topics.length });
     console.log('✓ Push notifications sent');
 
-    // Step 7: Summary
+    // Step 7: Clear Caches
+    console.log('\n[STEP 7] Clearing API caches...');
+    await clearCache();
+    console.log('✓ Caches cleared');
+
+    // Step 8: Summary
     console.log('\n========================================');
     console.log('JOB COMPLETED SUCCESSFULLY');
     console.log(`Topics: ${entry.topics.length}`);
