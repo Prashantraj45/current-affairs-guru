@@ -7,42 +7,135 @@ function getClient() {
   return new OpenAI({ baseURL: 'https://api.deepseek.com', apiKey });
 }
 
-function extractJson(text) {
-  let cleaned = text.trim();
-  
-  // 1. Remove markdown code blocks
-  cleaned = cleaned.replace(/```json/gi, '').replace(/```/g, '');
-  
-  // 2. Fix bullet points outside strings
-  cleaned = cleaned.replace(/^[ \t]*[•\-]\s*"/gm, '"');
-  
-  try { return JSON.parse(cleaned); } catch {}
-  
-  const match = cleaned.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-  if (match) {
-    let jsonStr = match[0];
-    try { return JSON.parse(jsonStr); } catch {}
-    
-    // 3. Try jsonrepair directly on the untouched matched string first
-    try { return JSON.parse(jsonrepair(jsonStr)); } catch {}
+// ─── JSON extraction helpers ──────────────────────────────────────────────────
 
-    // 4. Fallback: Fix unescaped control characters in string literals
-    let fallbackStr = jsonStr.replace(/[\n\r\t]+/g, ' ');
-    fallbackStr = fallbackStr.replace(/[\u0000-\u001F]+/g, '');
-    
-    try { return JSON.parse(fallbackStr); } catch {}
-    
-    // 5. Final jsonrepair fallback on the stripped string
-    try {
-      const repaired = jsonrepair(fallbackStr);
-      return JSON.parse(repaired);
-    } catch (err) {
-      console.warn(`[JSON Extraction] Severe LLM corruption. Failed to repair: ${err.message}`);
-      return null; // Return null instead of throwing to prevent crashing the batch
+// Character-level sanitizer: escapes control chars (newlines, tabs, etc.) that
+// land INSIDE JSON string values. A global .replace(/[\n\r\t]/g,' ') is wrong
+// because it also wrecks structural whitespace and confuses jsonrepair.
+function sanitizeJsonStrings(text) {
+  let out = '';
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (esc) { out += ch; esc = false; continue; }
+    if (ch === '\\' && inStr) { esc = true; out += ch; continue; }
+    if (ch === '"') { inStr = !inStr; out += ch; continue; }
+    if (inStr) {
+      if      (ch === '\n') out += '\\n';
+      else if (ch === '\r') out += '\\r';
+      else if (ch === '\t') out += '\\t';
+      else if (ch.charCodeAt(0) < 0x20) { /* drop other control chars */ }
+      else out += ch;
+    } else {
+      out += ch;
     }
   }
-  
-  console.warn('[JSON Extraction] No valid JSON brackets found in response');
+  return out;
+}
+
+// Brace-matching extractor: pulls each top-level {...} object from `text`.
+// Last-resort fallback when the enclosing array/wrapper is too corrupted to
+// parse as a whole unit.
+function extractObjects(text) {
+  const results = [];
+  let depth = 0, start = -1, inStr = false, esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (esc) { esc = false; continue; }
+    if (ch === '\\' && inStr) { esc = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === '{') { if (!depth) start = i; depth++; }
+    else if (ch === '}' && depth) {
+      depth--;
+      if (!depth && start !== -1) {
+        const slice = text.slice(start, i + 1);
+        try { results.push(JSON.parse(slice)); }
+        catch { try { results.push(JSON.parse(jsonrepair(sanitizeJsonStrings(slice)))); } catch {} }
+        start = -1;
+      }
+    }
+  }
+  return results;
+}
+
+// Finds the single largest [...] span in `text` using bracket-level tracking.
+// Needed to recover topics from a corrupted { "topics": [...] } wrapper where
+// the outer object fails to parse but the inner array items are mostly intact.
+function findLargestArray(text) {
+  let bestStart = -1, bestLen = 0;
+  let depth = 0, start = -1, inStr = false, esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (esc) { esc = false; continue; }
+    if (ch === '\\' && inStr) { esc = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === '[') { if (!depth) start = i; depth++; }
+    else if (ch === ']' && depth) {
+      depth--;
+      if (!depth && start !== -1) {
+        const len = i - start + 1;
+        if (len > bestLen) { bestLen = len; bestStart = start; }
+        start = -1;
+      }
+    }
+  }
+  return bestStart !== -1 ? text.slice(bestStart, bestStart + bestLen) : null;
+}
+
+function extractJson(text) {
+  let s = text.trim()
+    .replace(/<think>[\s\S]*?<\/think>/gi, '') // strip deepseek-reasoner thinking blocks
+    .replace(/```json\s*/gi, '').replace(/```\s*/g, '') // strip markdown fences
+    .replace(/^[ \t]*[•\-]\s*"/gm, '"') // fix stray bullet points before string keys
+    .trim();
+
+  // Pass 1: direct parse
+  try { return JSON.parse(s); } catch {}
+
+  // Pass 2: sanitize control chars inside strings, then parse + repair
+  const sSan = sanitizeJsonStrings(s);
+  try { return JSON.parse(sSan); } catch {}
+  try { return JSON.parse(jsonrepair(sSan)); } catch {}
+
+  // Isolate the outermost JSON structure
+  const m = s.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+  if (!m) {
+    console.warn('[JSON Extraction] No JSON brackets found in response');
+    return null;
+  }
+
+  const raw = m[0];
+
+  // Pass 3: parse/repair the matched structure (raw, then sanitized)
+  try { return JSON.parse(raw); } catch {}
+  try { return JSON.parse(jsonrepair(raw)); } catch {}
+
+  const rawSan = sanitizeJsonStrings(raw);
+  try { return JSON.parse(rawSan); } catch {}
+  try { return JSON.parse(jsonrepair(rawSan)); } catch {}
+
+  // Pass 4: partial recovery — pull objects from the largest inner array.
+  // Handles { "topics": [...corrupted...] } where the wrapper fails to parse.
+  const largestArr = findLargestArray(rawSan);
+  if (largestArr) {
+    const objs = extractObjects(largestArr);
+    if (objs.length > 0) {
+      console.warn(`[JSON Extraction] Partial recovery via array scan: ${objs.length} objects salvaged`);
+      return objs;
+    }
+  }
+
+  // Pass 5: extract any top-level {...} objects directly from the sanitized text
+  const topObjs = extractObjects(rawSan);
+  if (topObjs.length > 0) {
+    console.warn(`[JSON Extraction] Partial recovery via object scan: ${topObjs.length} objects salvaged`);
+    return topObjs.length === 1 ? topObjs[0] : topObjs;
+  }
+
+  console.warn('[JSON Extraction] All extraction attempts failed — response unrecoverable');
   return null;
 }
 
@@ -72,11 +165,11 @@ TOPIC SCHEMA (return this exact JSON object):
       "score": 0-100,
       "summary": "2 sentences: what happened + why it matters for UPSC",
       "why_in_news": "Single trigger event sentence",
-      "keyPoints": ["• point ≤15 words", "• point ≤15 words"],
-      "backgroundContext": ["• historical/constitutional/policy backdrop", "• second point"],
-      "editorialInsights": ["• critical analysis or debate angle", "• second point"],
-      "interlinkages": ["• link to other GS area or related event", "• second point"],
-      "explanation": "• point1\\n• point2\\n• point3\\n• point4",
+      "keyPoints": ["point 1 max 15 words", "point 2 max 15 words"],
+      "backgroundContext": ["historical or constitutional backdrop point", "second point"],
+      "editorialInsights": ["critical analysis or debate angle", "second point"],
+      "interlinkages": ["link to other GS area or related event", "second point"],
+      "explanation": "point1. point2. point3. point4.",
       "facts": ["static fact1", "static fact2"],
       "tags": ["GS-X", "syllabus-area", "keyword"],
       "prelims": {
@@ -85,10 +178,10 @@ TOPIC SCHEMA (return this exact JSON object):
       },
       "mains": {
         "gs_paper": "GS-1|GS-2|GS-3|GS-4",
-        "question": "Exam-style analytical question ≥15 words",
-        "answer_framework": {"intro": "1 sentence", "body": ["pt1 ≥10 words", "pt2 ≥10 words", "pt3 ≥10 words"], "conclusion": "1 sentence"}
+        "question": "Exam-style analytical question min 15 words",
+        "answer_framework": {"intro": "1 sentence", "body": ["pt1 min 10 words", "pt2 min 10 words", "pt3 min 10 words"], "conclusion": "1 sentence"}
       },
-      "revision_note": "Compact ≤50 word summary for revision",
+      "revision_note": "Compact max 50 word summary for revision",
       "sources": ["copy src field values from whichever input news items this topic draws from"]
     }
   ]
@@ -119,6 +212,9 @@ export async function callBatchTopics(newsBatch) {
 // ─── Pass 2: Case Studies (deepseek-reasoner) ─────────────────────────────────
 // Input: merged topic list (titles + summaries only — small prompt).
 // Generates 5–6 deep policy/governance case studies.
+// NOTE: deepseek-reasoner does NOT support response_format: json_object.
+// The model outputs its reasoning in reasoning_content; content holds the answer.
+// extractJson strips any <think>...</think> blocks defensively.
 
 const CASE_STUDY_SYSTEM = `You are a UPSC mains case study writer. Given a list of today's current affairs topics, generate 5-6 deep policy/governance case studies suitable for UPSC GS-2/GS-3/GS-4 mains answers.
 
@@ -134,9 +230,9 @@ CASE STUDY SCHEMA (return array of these):
   "intervention": "Policy action, judicial order, or legislative measure taken — 2-3 sentences",
   "outcome": "Result, current status, and remaining challenges — 2-3 sentences",
   "learningPoints": [
-    "• Lesson for governance, polity, or ethics — specific and exam-ready",
-    "• Second lesson",
-    "• Third lesson"
+    "Lesson for governance, polity, or ethics — specific and exam-ready",
+    "Second lesson",
+    "Third lesson"
   ],
   "mainsAngle": {
     "gs_paper": "GS-2|GS-3|GS-4",
@@ -224,7 +320,7 @@ MCQ SCHEMA (return this object):
 {
   "mcqs": [
     {
-      "question": "Complete question ≥15 words",
+      "question": "Complete question min 15 words",
       "options": ["A. option", "B. option", "C. option", "D. option"],
       "answer": "A|B|C|D",
       "explanation": "1-2 sentence explanation of why the answer is correct",

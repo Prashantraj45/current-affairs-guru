@@ -56,6 +56,29 @@ jobs:
             echo "Installing dependencies..."
             npm ci
 
+            echo "Installing Chrome system dependencies..."
+            sudo yum install -y \
+              atk \
+              at-spi2-atk \
+              libXcomposite \
+              libXdamage \
+              libXfixes \
+              libXrandr \
+              libgbm \
+              libxkbcommon \
+              nss \
+              alsa-lib \
+              pango \
+              cups-libs \
+              gtk3 \
+              dbus-glib \
+              mesa-libgbm \
+              xorg-x11-fonts-100dpi \
+              xorg-x11-fonts-75dpi \
+              xorg-x11-fonts-cyrillic \
+              xorg-x11-fonts-misc \
+              xorg-x11-fonts-Type1 || true
+
             echo "Installing Puppeteer Chrome..."
             npx puppeteer browsers install chrome
 
