@@ -1,4 +1,21 @@
-const cache = new Map();
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const CACHE_DIR = path.join(__dirname, '.disk_cache');
+const ONE_HOUR_MS = 60 * 60 * 1000;
+
+// Ensure cache directory exists on startup
+async function initCache() {
+  try {
+    await fs.mkdir(CACHE_DIR, { recursive: true });
+  } catch (err) {
+    console.error('Failed to create disk cache directory', err);
+  }
+}
+initCache();
 
 function getMsUntil1159PMIST() {
   const now = Date.now();
@@ -16,7 +33,20 @@ function getMsUntil1159PMIST() {
   return targetIST.getTime() - nowIST.getTime();
 }
 
-export function apiCache(req, res, next) {
+function calculateExpiry() {
+  const msUntilMidnight = getMsUntil1159PMIST();
+  // Expiry is 1 hour from now, capped at exactly 11:59 PM IST
+  const ttl = Math.min(ONE_HOUR_MS, msUntilMidnight);
+  return Date.now() + ttl;
+}
+
+function getCacheFilePath(key) {
+  // Convert URL to a safe filename using base64 and replacing invalid chars
+  const safeKey = Buffer.from(key).toString('base64').replace(/[/+=]/g, '_');
+  return path.join(CACHE_DIR, `${safeKey}.json`);
+}
+
+export async function apiCache(req, res, next) {
   // Only cache GET requests
   if (req.method !== 'GET') {
     return next();
@@ -28,28 +58,49 @@ export function apiCache(req, res, next) {
   }
 
   const key = req.originalUrl;
-  const cachedEntry = cache.get(key);
+  const filePath = getCacheFilePath(key);
 
-  if (cachedEntry) {
+  // Attempt to read from disk
+  try {
+    const fileContent = await fs.readFile(filePath, 'utf-8');
+    const cachedEntry = JSON.parse(fileContent);
+
+    // Additionally check if it's past 11:59 PM IST by making sure expiry doesn't exceed true midnight bounds
     if (Date.now() < cachedEntry.expiry) {
       res.setHeader('X-Cache', 'HIT');
+      
+      // Sliding expiration: refresh for another hour (capped at midnight)
+      const newExpiry = calculateExpiry();
+      // Only bother writing to disk if it extends the cache by at least 1 minute to save I/O
+      if (newExpiry - cachedEntry.expiry > 60000) {
+        cachedEntry.expiry = newExpiry;
+        fs.writeFile(filePath, JSON.stringify(cachedEntry)).catch(() => {});
+      }
+      
       return res.json(cachedEntry.data);
     } else {
-      // Expired
-      cache.delete(key);
+      // Expired, delete the file in the background
+      fs.unlink(filePath).catch(() => {});
     }
+  } catch (err) {
+    // File doesn't exist or invalid JSON, proceed to MISS
   }
 
-  // Intercept res.json to cache the response
+  // Intercept res.json to cache the response to disk
   const originalJson = res.json.bind(res);
   res.json = (body) => {
     // Only cache successful 200 responses
     if (res.statusCode >= 200 && res.statusCode < 300) {
-      const ttl = getMsUntil1159PMIST();
-      cache.set(key, {
+      const cacheData = {
         data: body,
-        expiry: Date.now() + ttl
+        expiry: calculateExpiry()
+      };
+      
+      // Fire-and-forget write to disk
+      fs.writeFile(filePath, JSON.stringify(cacheData)).catch(err => {
+        console.error('Disk cache write error:', err);
       });
+      
       res.setHeader('X-Cache', 'MISS');
     }
     return originalJson(body);
@@ -58,6 +109,13 @@ export function apiCache(req, res, next) {
   next();
 }
 
-export function clearCache() {
-  cache.clear();
+export async function clearCache() {
+  try {
+    const files = await fs.readdir(CACHE_DIR);
+    for (const file of files) {
+      await fs.unlink(path.join(CACHE_DIR, file)).catch(() => {});
+    }
+  } catch (err) {
+    console.error('Failed to clear disk cache', err);
+  }
 }
