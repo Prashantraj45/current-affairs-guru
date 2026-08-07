@@ -262,18 +262,15 @@ export async function callBatchTopics(newsBatch) {
   return raw_topics.map(sanitizeTopic).filter(Boolean);
 }
 
-// ─── Pass 2: Case Studies (deepseek-reasoner) ─────────────────────────────────
+// ─── Pass 2: Case Studies (deepseek-chat) ─────────────────────────────────────
 // Input: merged topic list (titles + summaries only — small prompt).
 // Generates 5–6 deep policy/governance case studies.
-// NOTE: deepseek-reasoner does NOT support response_format: json_object.
-// The model outputs its reasoning in reasoning_content; content holds the answer.
-// extractJson strips any <think>...</think> blocks defensively.
 
 const CASE_STUDY_SYSTEM = `You are a UPSC mains case study writer. Given a list of today's current affairs topics, generate 5-6 deep policy/governance case studies suitable for UPSC GS-2/GS-3/GS-4 mains answers.
 
 CRITICAL DIVERSITY RULE: Each case study MUST cover a completely distinct policy domain or event. No two case studies may overlap thematically. Scan all generated case studies before finalising — reject and replace any that share a dominant theme with another.
 
-Return ONLY a JSON array of case study objects. No markdown, no prose outside JSON.
+Return ONLY a JSON object with a "caseStudies" array. No markdown, no prose outside JSON.
 
 CASE STUDY SCHEMA (return array of these):
 {
@@ -298,7 +295,6 @@ CASE STUDY SCHEMA (return array of these):
 export async function callCaseStudies(topics) {
   const client = getClient();
 
-  // Send only title + summary + category to keep prompt small
   const topicSummaries = topics.map((t) => ({
     title: t.title,
     summary: t.summary,
@@ -306,10 +302,14 @@ export async function callCaseStudies(topics) {
     importance: t.importance,
   }));
 
-  const userPrompt = `Generate 5-6 UPSC case studies from today's topics. Return a JSON array.\n\nTOPICS:\n${JSON.stringify(topicSummaries)}`;
+  const userPrompt = `Generate 5-6 UPSC case studies from today's topics. Return a JSON object with a "caseStudies" array.\n\nTOPICS:\n${JSON.stringify(topicSummaries)}`;
 
+  // deepseek-reasoner burns its entire max_tokens budget on internal thinking,
+  // leaving content empty. deepseek-chat with json_object is faster, cheaper,
+  // and guaranteed to produce output — case studies don't need chain-of-thought.
   const response = await client.chat.completions.create({
-    model: 'deepseek-reasoner',
+    model: 'deepseek-chat',
+    response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: CASE_STUDY_SYSTEM },
       { role: 'user', content: userPrompt },
@@ -321,7 +321,7 @@ export async function callCaseStudies(topics) {
   if (!raw) throw new Error('Empty response from DeepSeek (case studies)');
 
   const parsed = extractJson(raw);
-  if (!parsed) return []; // Fallback to empty array on corruption
+  if (!parsed) return [];
   return Array.isArray(parsed) ? parsed : (parsed.caseStudies || []);
 }
 

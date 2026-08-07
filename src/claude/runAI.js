@@ -141,13 +141,12 @@ export async function processNewsBatch(newsBatch, previousREADME = null) {
   }
 
   const batches = splitIntoBatches(newsBatch, 12);
-  console.log(`[AI] Pass 1 — ${batches.length} topic batches × deepseek-chat (2 concurrent)`);
+  console.log(`[AI] Pass 1 — ${batches.length} topic batches × deepseek-chat (3 concurrent)`);
 
-  // ── Pass 1: Topic extraction (2 concurrent — all-parallel holds N large JSON
-  // responses in memory simultaneously; 2 at a time cuts that peak significantly) ──
+  // ── Pass 1: Topic extraction (3 concurrent) ──────────────────────────────────
   const allTopicResults = [];
-  for (let i = 0; i < batches.length; i += 2) {
-    const window = batches.slice(i, i + 2);
+  for (let i = 0; i < batches.length; i += 3) {
+    const window = batches.slice(i, i + 3);
     const windowResults = await Promise.allSettled(
       window.map(async (batch, j) => {
         const idx = i + j;
